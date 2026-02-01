@@ -67,8 +67,8 @@ export default function Home() {
           Rain
         </h1>
         <p className="max-w-xl text-xs leading-relaxed text-[var(--fg-dim)] sm:text-sm">
-          Fully on-chain, non-custodial P2P lending on Sui. Rate discovery and
-          liquidation via DeepBook — no CEX dependency, no off-chain keepers.
+          We fix fake P2P: rate discovery and liquidation execution both use
+          Sui’s DeepBook — no CEX dependency, no off-chain keepers.
         </p>
         <div className="flex flex-wrap justify-center gap-3 text-xs">
           <span className="pixel-border rounded-none bg-[var(--panel)] px-4 py-2 uppercase">
