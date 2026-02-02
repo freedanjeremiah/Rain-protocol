@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Press_Start_2P } from "next/font/google";
+import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 import "@mysten/dapp-kit/dist/index.css";
@@ -23,7 +24,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={pressStart2P.variable}>
       <body className="font-pixel antialiased min-h-screen bg-[var(--bg)] text-[var(--fg)]">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+        </Providers>
+        <Toaster richColors position="top-center" />
       </body>
     </html>
   );
