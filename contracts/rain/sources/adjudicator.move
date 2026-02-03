@@ -129,6 +129,28 @@ public fun liquidation_auth_vault_id(auth: &LiquidationAuth): ID {
     auth.vault_id
 }
 
+/// Consume RepaymentAuth (one-time use). Call after verifying vault_id and performing release.
+public fun consume_repayment_auth(auth: RepaymentAuth) {
+    let RepaymentAuth { id, vault_id: _ } = auth;
+    sui::object::delete(id);
+}
+
+/// Consume LiquidationAuth (one-time use). Call after verifying vault_id and performing release.
+public fun consume_liquidation_auth(auth: LiquidationAuth) {
+    let LiquidationAuth { id, vault_id: _ } = auth;
+    sui::object::delete(id);
+}
+
+/// Return vault_id from RepaymentProof so Custody can verify rule-based withdraw.
+public fun repayment_proof_vault_id(proof: &RepaymentProof): ID {
+    proof.vault_id
+}
+
+/// Consume RepaymentProof (e.g. after rule-based release in Custody). One-time use.
+public fun consume_repayment_proof(proof: RepaymentProof) {
+    let RepaymentProof { vault_id: _ } = proof;
+}
+
 #[test_only]
 public fun create_repayment_proof_for_testing(vault_id: ID): RepaymentProof {
     create_repayment_proof(vault_id)
