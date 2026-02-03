@@ -6,8 +6,18 @@ version = "0.1.0"
 [dependencies]
 deepbook = { local = "../../deepbookv3/packages/deepbook" }
 token    = { local = "../../deepbookv3/packages/token", override = true }
-# Pyth: add when implementing oracle_adapter. Example (may need correct subdir for your Sui CLI):
-# Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/sui/contracts", rev = "sui-contract-mainnet" }
+
+[dependencies.Pyth]
+git = "https://github.com/pyth-network/pyth-crosschain.git"
+subdir = "target_chains/sui/contracts"
+rev = "sui-contract-mainnet"
+
+[dependencies.Wormhole]
+git = "https://github.com/wormhole-foundation/wormhole.git"
+subdir = "sui/wormhole"
+rev = "sui/mainnet"
+
+# Do not add explicit Sui dep; use toolchain default to avoid MoveStdlib version conflict with deepbook.
 
 [addresses]
 rain = "0x0"

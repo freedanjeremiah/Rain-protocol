@@ -4,8 +4,9 @@ Non-custodial P2P orderbook lending protocol on Sui. See repo root [readme.md](.
 
 ## Layout
 
-- `Move.toml` – package manifest; deps on local `deepbookv3` and `token`. Pyth is commented out (add when implementing `oracle_adapter`).
-- `sources/rain.move` – placeholder module; add `oracle_adapter`, `adjudicator`, `custody`, `vault`, etc. per the implementation guide.
+- `Move.toml` – deps: local `deepbookv3`, `token`; git `Pyth`, `Wormhole`, `Sui` (override) for oracle.
+- `sources/rain.move` – placeholder.
+- `sources/oracle_adapter.move` – Phase 1.1: wraps Pyth (same API as [deepbook-amm vault](https://github.com/...)); returns (price, expo) for a price feed; no custody.
 
 ## Build & test
 
@@ -15,8 +16,11 @@ sui move build
 sui move test
 ```
 
+If build fails with **"Error parsing ... Move.toml: expected `.`, `=`"** (Pyth and Wormhole use `Move.mainnet.toml`), run the fix script then build again:
+
+```powershell
+./scripts/fix_pyth_manifest.ps1
+sui move build --allow-dirty
+```
+
 Use `--skip-fetch-latest-git-deps` if dependencies haven’t changed.
-
-## Adding Pyth
-
-When implementing the oracle adapter, uncomment and fix the Pyth dependency in `Move.toml`. The Pyth Sui contracts repo may use a different manifest name; you may need the correct `subdir` or a published Pyth package ID for mainnet.

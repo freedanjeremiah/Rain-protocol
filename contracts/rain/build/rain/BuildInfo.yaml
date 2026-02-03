@@ -7,7 +7,7 @@ compiled_package_info:
     save_disassembly: false
     install_dir: ~
     force_recompilation: false
-    allow_dirty: false
+    allow_dirty: true
     default_flavor: sui
     default_edition: ~
     silence_warnings: false
@@ -24,6 +24,8 @@ compiled_package_info:
     set_unpublished_deps_to_zero: false
 dependencies:
   - MoveStdlib
+  - Pyth
   - Sui
+  - Wormhole
   - deepbook
   - token_1
