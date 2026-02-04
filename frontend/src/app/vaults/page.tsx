@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
@@ -21,22 +20,18 @@ function formatMist(mist: string) {
 export default function VaultsPage() {
   const { vaults, isPending, refetch, isConfigured } = useOwnedVaults();
   const { createVault, isPending: isCreating } = useCreateVault();
-  const [creating, setCreating] = useState(false);
 
   const handleCreate = async () => {
     if (!isConfigured) {
       toast.error("Set NEXT_PUBLIC_RAIN_PACKAGE_ID to create vaults.");
       return;
     }
-    setCreating(true);
     try {
       await createVault();
       toast.success("Vault created.");
       refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Create vault failed.");
-    } finally {
-      setCreating(false);
     }
   };
 

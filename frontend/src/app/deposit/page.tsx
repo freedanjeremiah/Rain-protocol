@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Layout from "@/components/common/Layout";
@@ -18,14 +18,12 @@ function DepositContent() {
   const { deposit, isPending: isDepositing } = useDeposit();
   const [selectedVaultId, setSelectedVaultId] = useState("");
   const [amountSui, setAmountSui] = useState("");
-  useEffect(() => {
-    if (vaults.length > 0 && !selectedVaultId)
-      setSelectedVaultId(preselected || vaults[0].objectId);
-  }, [vaults, preselected, selectedVaultId]);
+  const defaultVaultId = vaults.find((v) => v.objectId === preselected)?.objectId ?? vaults[0]?.objectId ?? "";
+  const effectiveVaultId = selectedVaultId || defaultVaultId;
 
   const handleDeposit = async () => {
     const amountMist = Math.floor(parseFloat(amountSui || "0") * MIST_PER_SUI);
-    if (!selectedVaultId || amountMist <= 0) {
+    if (!effectiveVaultId || amountMist <= 0) {
       toast.error("Select a vault and enter amount.");
       return;
     }
@@ -34,7 +32,7 @@ function DepositContent() {
       return;
     }
     try {
-      await deposit(selectedVaultId, String(amountMist));
+      await deposit(effectiveVaultId, String(amountMist));
       toast.success("Deposit successful.");
       setAmountSui("");
       refetch();
@@ -68,7 +66,7 @@ function DepositContent() {
                   Vault
                 </label>
                 <select
-                  value={selectedVaultId}
+                  value={effectiveVaultId}
                   onChange={(e) => setSelectedVaultId(e.target.value)}
                   className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
                 >
