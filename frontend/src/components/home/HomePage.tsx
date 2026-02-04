@@ -44,8 +44,20 @@ export default function HomePage() {
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Link
-            href="/borrow"
+            href="/vaults"
             className="pixel-btn pixel-btn-accent border-4 px-4 py-2 text-xs uppercase"
+          >
+            Vaults
+          </Link>
+          <Link
+            href="/deposit"
+            className="pixel-btn border-4 px-4 py-2 text-xs uppercase"
+          >
+            Deposit
+          </Link>
+          <Link
+            href="/borrow"
+            className="pixel-btn border-4 px-4 py-2 text-xs uppercase"
           >
             Borrow
           </Link>
@@ -56,10 +68,10 @@ export default function HomePage() {
             Lend
           </Link>
           <Link
-            href="/vaults"
+            href="/repay"
             className="pixel-btn border-4 px-4 py-2 text-xs uppercase"
           >
-            Vaults
+            Repay
           </Link>
           <Link
             href="/liquidate"
