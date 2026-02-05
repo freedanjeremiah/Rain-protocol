@@ -1,6 +1,7 @@
-# 📌 Rain sui
 
-**We fix fake P2P:** rate discovery and liquidation execution both use Sui’s DeepBook — no CEX dependency, no off-chain keepers.
+# 📌 Rain
+
+**We fix fake P2P.** Most “P2P” lending still depends on CEXs for rates and keeper bots for liquidations. Rain runs rate discovery and liquidation execution on Sui’s DeepBook — no CEX, no off-chain keepers. Real peer-to-peer, on-chain.
 
 ---
 
@@ -8,7 +9,7 @@
 
 ### The real problem (not marketing fluff)
 
-Today’s “P2P lending” in crypto is **not truly peer-to-peer** — that’s the “fake P2P” Rain fixes.
+Today’s “P2P lending” in crypto is **not truly peer-to-peer**.
 
 Even when users lend/borrow from each other:
 
@@ -37,55 +38,60 @@ Even when users lend/borrow from each other:
 
 ---
 
+
 ### Why this matters
 
-A **single centralized venue** (or off-chain keepers) can:
+A **single centralized venue** can:
 
 * Halt withdrawals
 * Freeze markets
 * Manipulate prices
 * Cascade liquidations
 
-That’s the fake P2P we fix: Rain uses DeepBook for rate discovery and liquidation, so no CEX dependency and no off-chain keepers.
+This breaks the promise of DeFi.
 
 ---
 
 # 2️⃣ SOLUTION (one sentence)
 
-> **Rain is a fully on-chain, non-custodial P2P lending marketplace on Sui: rate discovery and liquidation execution both run through DeepBook orderbooks, with no CEX dependency and no off-chain keepers; risk is secured using decentralized oracles.**
+> **Build a fully on-chain, non-custodial P2P lending marketplace on Sui where interest rates and liquidation execution are discovered through DeepBook orderbooks, while risk is secured using decentralized oracles. User funds are held in a custody contract and move only on rule satisfaction or adjudicator authorization (no protocol key can unilaterally move assets).**
 
 ---
 
-# 3️⃣ CORE DESIGN PRINCIPLES (how Rain fixes fake P2P)
+# 3️⃣ CORE DESIGN PRINCIPLES
 
-1. **No pooled liquidity** — true P2P, no protocol-controlled pools
-2. **User-owned vaults** — non-custodial; users keep control
-3. **Orderbook-based rate discovery** — rates from DeepBook, not CEX or algo
-4. **Oracle-based risk checks** — Pyth for LTV/liquidation, not centralized feeds
-5. **On-chain liquidation execution** — via DeepBook; no keeper bots or off-chain logic
-6. **Composable, censorship-resistant** — no single point of failure
+1. **No pooled liquidity**
+2. **User-owned vaults**
+3. **Custody + Adjudicator pattern** – assets held in a custody contract; movement only on rule satisfaction or adjudicator authorization (no protocol key can unilaterally move user funds)
+4. **Orderbook-based rate discovery**
+5. **Oracle-based risk checks**
+6. **On-chain liquidation execution**
+7. **Partial fills** – borrow and lend orders may be filled in multiple matches; each fill creates a loan position; vault debt is the sum of all positions
+8. **Composable, censorship-resistant**
+
+**Note:** DeepBook DEX integrations are on **mainnet**; Rain’s DeepBookAdapter and deployment config target mainnet for pool IDs and execution.
 
 ---
 
 # 4️⃣ ACTORS (ALL of them)
 
-| Actor                  | Role in Rain                                       |
-| ---------------------- | -------------------------------------------------- |
-| Borrower               | Locks collateral, borrows assets                   |
-| Lender                 | Supplies assets, earns yield                       |
-| Liquidator             | Executes liquidations on-chain via DeepBook        |
-| Oracle Provider (Pyth) | Secure price feeds for risk (no CEX dependency)    |
-| DeepBook               | Rate discovery + matching + liquidation execution |
-| Protocol Contracts     | Enforce rules (no custody, no relayers)            |
-| Frontend (optional)    | UX only                                            |
+| Actor                  | Role                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| Borrower               | Locks collateral, borrows assets                                    |
+| Lender                 | Supplies assets, earns yield                                        |
+| Liquidator             | Executes liquidations (via Adjudicator authorization)                |
+| Oracle Provider (Pyth) | Provides secure price feeds                                         |
+| DeepBook               | On-chain matching & execution                                       |
+| **Custody contract**   | Holds collateral (and optional escrow); releases only on rules or Adjudicator authorization |
+| **Adjudicator contract** | Authorizes releases (repayment, liquidation, disputes) from evidence; does not hold funds |
+| Protocol Contracts     | Enforce rules (RiskEngine, LendingMarketplace, etc.)                  |
+| Frontend (optional)    | UX only                                                              |
 
-No admin keys. No trusted relayers. No off-chain keepers.
+No admin keys. No trusted relayers.
 
 ---
 
 # 5️⃣ SYSTEM ARCHITECTURE (HIGH LEVEL)
-
-Rain: rate discovery and liquidation both go through DeepBook; oracles only for risk.
 
 ```
 ┌───────────────────────────────────────┐
@@ -93,17 +99,24 @@ Rain: rate discovery and liquidation both go through DeepBook; oracles only for 
 └───────────────┬───────────────────────┘
                 │
 ┌───────────────▼───────────────────────┐
-│      Rain Lending Marketplace         │
+│         Lending Marketplace            │
 │  (Orderbook + Loan Coordination)       │
 └───────────────┬───────────────────────┘
                 │
      ┌──────────▼──────────┐
-     │   User Vaults       │
-     │ (Collateral & Debt) │
+     │   User Vaults        │
+     │ (State & Accounting) │
      └──────────┬──────────┘
                 │
- ┌──────────────▼──────────────┐
- │ Risk & Liquidation Engine   │
+     ┌──────────▼──────────┐      ┌─────────────────────┐
+     │  Custody Contract    │◄─────│  Adjudicator        │
+     │  (holds collateral;  │      │  (authorizes        │
+     │   moves only on      │      │   releases from     │
+     │   Adjudicator/rules) │      │   evidence; no      │
+     └──────────┬──────────┘      │   custody)           │
+                │                 └──────────┬──────────┘
+ ┌──────────────▼──────────────┐             │
+ │ Risk & Liquidation Engine   │─────────────┘
  └───────┬─────────────┬───────┘
          │             │
 ┌────────▼──────┐ ┌────▼────────┐
@@ -116,7 +129,7 @@ Rain: rate discovery and liquidation both go through DeepBook; oracles only for 
 
 # 6️⃣ CONTRACTS (VERY IMPORTANT)
 
-Rain has **7 core contracts/modules**.
+You will have **9 core contracts/modules**.
 
 ---
 
@@ -124,24 +137,25 @@ Rain has **7 core contracts/modules**.
 
 ### Purpose
 
-Holds:
+Tracks **state and accounting** for a user’s position. Does **not** hold the actual collateral; the **Custody** contract holds assets. UserVault records:
 
-* Collateral
-* Borrowed assets
-* Debt accounting
+* Collateral balance (reference to Custody)
+* Borrowed assets / debt accounting
+* Liquidation threshold
 
 ### Responsibilities
 
-* Lock collateral
+* Record lock/unlock of collateral (Custody performs the actual move on Adjudicator or rule satisfaction)
 * Track debt
-* Allow withdrawals only if healthy
+* Withdrawals only when healthy – enforced by Custody checking rules + optional Adjudicator attestation
 
 ### Key State
 
 ```move
 struct Vault {
     owner: address,
-    collateral: Balance<SUI>,
+    custody_id: ID,           // reference to Custody holding this vault’s collateral
+    collateral_balance: u64,
     debt: Balance<USDC>,
     liquidation_threshold: u64,
 }
@@ -149,13 +163,15 @@ struct Vault {
 
 ### Interacts with
 
+* Custody
+* Adjudicator (indirectly via Custody)
 * RiskEngine
-* Rain LendingMarketplace
+* LendingMarketplace
 * LiquidationEngine
 
 ---
 
-## 2. `LendingMarketplace` (Rain core logic)
+## 2. `LendingMarketplace` (core logic)
 
 ### Purpose
 
@@ -164,12 +180,14 @@ Coordinates:
 * Loan creation
 * Order placement
 * Loan matching
+* **Partial fills** – orders are filled in one or more matches; each match creates a loan position
 
 ### What it does
 
-* Accepts borrow orders
-* Accepts lend orders
-* Forwards them to DeepBook
+* Accepts borrow orders and lend orders (with `amount`, `filled_amount`, `remaining`)
+* Forwards orders to DeepBook; consumes fill results from DeepBook (or matches in Move)
+* On each fill (full or partial): updates both orders’ `filled_amount`, creates a **LoanPosition** (borrower, lender, principal, rate, term), moves principal lender → borrower
+* Vault debt = sum of all position principals (and accrued interest) for that vault
 
 ### Does NOT
 
@@ -179,7 +197,7 @@ Coordinates:
 
 ### Interacts with
 
-* DeepBook (rate discovery + execution)
+* DeepBook (mainnet)
 * UserVault
 
 ---
@@ -188,7 +206,7 @@ Coordinates:
 
 ### Purpose
 
-Standardizes loan intents.
+Standardizes loan intents. Orders support **partial fills**: `filled_amount` and `remaining` are updated on each match until the order is fully filled or cancelled.
 
 ### Borrow Order
 
@@ -196,10 +214,12 @@ Standardizes loan intents.
 struct BorrowOrder {
     borrower: address,
     asset: USDC,
-    amount: u64,
+    amount: u64,           // total size
+    filled_amount: u64,    // sum of fills so far
     max_interest: u64,
     duration: u64,
 }
+// remaining = amount - filled_amount
 ```
 
 ### Lend Order
@@ -209,10 +229,15 @@ struct LendOrder {
     lender: address,
     asset: USDC,
     amount: u64,
+    filled_amount: u64,
     min_interest: u64,
     duration: u64,
 }
 ```
+
+### Loan position (per fill)
+
+Each partial fill creates a **LoanPosition** (borrower, lender, principal = fill size, rate, term). Vault debt = sum of principals (and interest) of all positions for that vault.
 
 ---
 
@@ -220,13 +245,13 @@ struct LendOrder {
 
 ### Purpose
 
-Acts as a **thin adapter**, not a relayer.
+Acts as a **thin adapter**, not a relayer. Integrates with **DeepBook on mainnet** (DEX integrations are mainnet).
 
 ### Responsibilities
 
 * Submits orders to DeepBook
-* Reads matched results
-* Settles trades
+* Reads matched results and **partial fills** (each fill: size, price/counterparty)
+* Settles trades; LendingMarketplace updates order `filled_amount` and creates LoanPosition per fill
 
 ### Why needed
 
@@ -236,8 +261,8 @@ Acts as a **thin adapter**, not a relayer.
 
 ### Interacts with
 
-* DeepBook
-* Rain LendingMarketplace
+* DeepBook (mainnet)
+* LendingMarketplace
 
 ---
 
@@ -266,8 +291,9 @@ BorrowLimit = CollateralValue * LTV
 
 ### Interacts with
 
-* UserVault
+* UserVault (state for LTV / liquidation checks)
 * OracleAdapter
+* Adjudicator (liquidation evidence is derived from RiskEngine output)
 
 ---
 
@@ -294,20 +320,81 @@ Standard interface to price feeds.
 
 ### Purpose
 
-Fully on-chain liquidation.
+Fully on-chain liquidation. Does **not** move collateral directly; it requests **Adjudicator** authorization, then **Custody** performs the release.
 
 ### Workflow
 
-1. RiskEngine flags unhealthy vault
+1. RiskEngine flags unhealthy vault (oracle price + LTV)
 2. Liquidator calls `liquidate(vault)`
-3. Collateral is sold via DeepBook
-4. Debt is repaid
-5. Bonus goes to liquidator
+3. LiquidationEngine submits evidence (oracle price, vault state) to **Adjudicator**
+4. Adjudicator attests **liquidate** → authorizes Custody to release collateral to liquidator
+5. Custody releases collateral; LiquidationEngine sells it via DeepBook
+6. Debt repaid; bonus to liquidator
 
-### Key feature (pitch-aligned)
+### Key feature
 
-* **DeepBook is the liquidation execution engine** — no CEX, no keeper bots, no off-chain logic
-* No auctions; orderbook execution only
+* **DeepBook is the execution engine**
+* **Custody + Adjudicator** – no protocol key moves funds; only Adjudicator authorization
+* No auctions, no keepers, no off-chain logic
+
+### Interacts with
+
+* Adjudicator
+* Custody (via Adjudicator authorization)
+* RiskEngine
+* DeepBookAdapter
+
+---
+
+## 8. `Custody` (per-user or per-vault)
+
+### Purpose
+
+**Holds** user collateral (and optionally escrowed loan principal). Does **not** compute LTV or decide liquidations. Moves assets **only** when:
+
+* **Rules:** owner withdraw when vault is healthy (e.g. debt zero or rule-based check), or
+* **Adjudicator authorization:** release to owner (repayment verified), to liquidator (liquidation allowed), or to borrower (loan matched).
+
+### Responsibilities
+
+* Accept collateral deposits from owner
+* Release collateral **only** on (1) rule satisfaction (e.g. healthy withdraw), or (2) valid **Adjudicator** authorization
+* No admin key; no protocol key can unilaterally move funds
+
+### Does NOT
+
+* Compute LTV or liquidation eligibility
+* Hold any business logic beyond “release iff rules or Adjudicator say so”
+
+### Interacts with
+
+* Adjudicator (reads authorizations)
+* UserVault (state reference)
+
+---
+
+## 9. `Adjudicator`
+
+### Purpose
+
+**Authorizes** releases from Custody. Does **not** hold any assets. Consumes **evidence** (oracle price, vault state, repayment proof, dispute submissions) and outputs **authorizations** (e.g. “release collateral to owner,” “release to liquidator”).
+
+### Responsibilities
+
+* **Repayment:** On repayment proof (e.g. debt cleared in LendingMarketplace) → authorize “release collateral to owner”
+* **Liquidation:** On Pyth price + vault state showing LTV above threshold → authorize “release collateral to liquidator”
+* **Disputes (optional):** On evidence from both sides → authorize release to rightful party
+
+### Does NOT
+
+* Hold funds
+* Act as a relayer or keeper
+
+### Interacts with
+
+* Custody (issues authorizations)
+* RiskEngine / LiquidationEngine (submit evidence for liquidation)
+* OracleAdapter (price evidence)
 
 ---
 
@@ -317,32 +404,30 @@ Fully on-chain liquidation.
 
 ## 🟢 Borrow Flow
 
-1. User deposits collateral into `UserVault`
+1. User deposits collateral into **Custody** (linked to UserVault)
 2. RiskEngine checks health
-3. User submits BorrowOrder
-4. Order goes to DeepBook
-5. Lender order matches
-6. Funds move directly lender → borrower
-7. Vault debt updated
+3. User submits BorrowOrder (amount, max_interest, duration)
+4. Order goes to DeepBook (mainnet)
+5. Lender order(s) match – **partial fills enabled**: each fill updates both orders’ `filled_amount`, creates a **LoanPosition**, moves principal lender → borrower
+6. Vault debt = sum of all position principals (and interest); repeat until order fully filled or cancelled
 
 ---
 
 ## 🔵 Lend Flow
 
-1. Lender submits LendOrder
-2. Funds locked temporarily
-3. DeepBook matches with borrower
-4. Loan created
-5. Interest accrues over time
+1. Lender submits LendOrder (amount, min_interest, duration)
+2. Funds locked temporarily (Custody or escrow as designed)
+3. DeepBook (mainnet) matches with borrower(s) – **partial fills**: lend order can fill across multiple borrow orders
+4. Each fill creates a LoanPosition; interest accrues per position over time
 
 ---
 
 ## 🔴 Repayment Flow
 
 1. Borrower repays principal + interest
-2. Vault debt cleared
-3. Collateral unlocked
-4. Lender receives funds
+2. Vault debt cleared in LendingMarketplace / UserVault
+3. **Adjudicator** attests repayment → authorizes **Custody** to release collateral to owner
+4. Custody releases collateral; lender receives funds
 
 ---
 
@@ -350,37 +435,36 @@ Fully on-chain liquidation.
 
 1. Oracle price updates
 2. RiskEngine detects unhealthy vault
-3. Anyone can call `liquidate`
-4. LiquidationEngine sells collateral on DeepBook
-5. Best on-chain price used
-6. Debt repaid
-7. Liquidator rewarded
+3. Anyone calls `liquidate`; LiquidationEngine submits evidence to **Adjudicator**
+4. **Adjudicator** attests liquidation allowed → authorizes **Custody** to release collateral to liquidator
+5. Custody releases; LiquidationEngine sells collateral on DeepBook
+6. Best on-chain price used; debt repaid; liquidator rewarded
 
 ---
 
-# 8️⃣ WHY RAIN IS DIFFERENT (fake P2P vs Rain)
+# 8️⃣ WHY THIS IS DIFFERENT FROM SuiLend
 
-| Feature          | Typical / SuiLend | Rain sui                          |
-| ---------------- | ----------------- | --------------------------------- |
-| Liquidity        | Pooled            | P2P                               |
-| Rate discovery   | Algorithmic / CEX | DeepBook orderbook                |
-| Execution        | Internal / CEX    | DeepBook                          |
-| Custody          | Protocol          | User vault (non-custodial)        |
-| Liquidations     | Auctions / keepers| On-chain via DeepBook             |
-| CEX dependency   | Often yes         | No                                |
-| Off-chain keepers| Often yes         | No                                |
+| Feature          | SuiLend      | Your Protocol                    |
+| ---------------- | ------------ | -------------------------------- |
+| Liquidity        | Pooled       | P2P                              |
+| Rates            | Algorithmic  | Market-discovered                |
+| Execution        | Internal     | DeepBook                         |
+| Custody          | Protocol     | Custody contract + Adjudicator   |
+| Liquidations     | Auctions     | Orderbook + Adjudicator auth     |
+| Price dependency | Oracles only | Oracle + DeepBook                |
 
 ---
 
-# 9️⃣ WHY RAIN MAXIMIZES SUI
+# 9️⃣ WHY THIS MAXIMIZES SUI CAPABILITIES
 
-Rain’s pitch is built on Sui: **rate discovery and liquidation execution both use DeepBook — no CEX dependency, no off-chain keepers.**
+✅ DeepBook as core infra (mainnet)
+✅ Partial fills for borrow/lend orders
+✅ Parallel execution
+✅ Object-based vaults
+✅ No relayers
+✅ No centralized actors
 
-✅ **DeepBook** — core infra for both rates and liquidation (not just “on Sui”)  
-✅ **Parallel execution** — object-based vaults, no global lock  
-✅ **No relayers, no keepers** — fully on-chain flows  
-✅ **No centralized execution** — orderbook + oracles only  
+This is **not portable** to Ethereum easily.
 
-This design is **not portable** to Ethereum in the same way; it’s Sui-native.
----
+
 
