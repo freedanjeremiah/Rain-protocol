@@ -23,12 +23,17 @@ public struct CustodyVault has key, store {
 
 /// Create a new custody vault; transferred to caller (owner). vault_id = object::id of returned vault.
 public fun create_vault(ctx: &mut TxContext) {
-    let vault = CustodyVault {
+    let vault = create_vault_returning(ctx);
+    sui::transfer::transfer(vault, sender(ctx));
+}
+
+/// Create a custody vault and return it (for UserVault to link). Caller must transfer to owner.
+public(package) fun create_vault_returning(ctx: &mut TxContext): CustodyVault {
+    CustodyVault {
         id: sui::object::new(ctx),
         owner: sender(ctx),
         balance: sui::balance::zero<SUI>(),
-    };
-    sui::transfer::transfer(vault, sender(ctx));
+    }
 }
 
 /// Owner deposits SUI into this vault. Credits the vault's balance.
