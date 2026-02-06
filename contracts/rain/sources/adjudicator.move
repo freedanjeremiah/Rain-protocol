@@ -39,6 +39,19 @@ public struct VaultState has copy, drop, store {
     liquidation_threshold_bps: u64,
 }
 
+/// Build VaultState for package callers (e.g. LiquidationEngine).
+public(package) fun create_vault_state(
+    collateral_amount: u64,
+    debt: u64,
+    liquidation_threshold_bps: u64,
+): VaultState {
+    VaultState {
+        collateral_amount,
+        debt,
+        liquidation_threshold_bps,
+    }
+}
+
 /// Create RepaymentProof. Only callable by package modules (e.g. UserVault when debt is cleared).
 public(package) fun create_repayment_proof(vault_id: ID): RepaymentProof {
     RepaymentProof { vault_id }
@@ -60,7 +73,7 @@ public fun authorize_repayment(
     sui::transfer::transfer(auth, sender(ctx));
 }
 
-/// Verify LTV >= liquidation threshold using oracle price and vault state; if valid, create LiquidationAuth.
+/// Verify LTV >= liquidation threshold using oracle price and vault state; if valid, create and transfer LiquidationAuth to sender.
 /// Uses OracleAdapter for price; computes collateral_value from price/expo and checks debt/collateral_value >= threshold.
 public fun authorize_liquidation(
     vault_id: ID,
@@ -71,6 +84,48 @@ public fun authorize_liquidation(
     max_age_secs: u64,
     ctx: &mut TxContext,
 ) {
+    let auth = authorize_liquidation_internal(
+        vault_id,
+        collateral_price_feed_id,
+        price_info_object,
+        clock,
+        vault_state,
+        max_age_secs,
+        ctx,
+    );
+    sui::transfer::transfer(auth, sender(ctx));
+}
+
+/// Same as authorize_liquidation but returns LiquidationAuth (for LiquidationEngine to use in one tx). Package-only.
+public(package) fun authorize_liquidation_returning(
+    vault_id: ID,
+    collateral_price_feed_id: vector<u8>,
+    price_info_object: &PriceInfoObject,
+    clock: &Clock,
+    vault_state: VaultState,
+    max_age_secs: u64,
+    ctx: &mut TxContext,
+): LiquidationAuth {
+    authorize_liquidation_internal(
+        vault_id,
+        collateral_price_feed_id,
+        price_info_object,
+        clock,
+        vault_state,
+        max_age_secs,
+        ctx,
+    )
+}
+
+fun authorize_liquidation_internal(
+    vault_id: ID,
+    collateral_price_feed_id: vector<u8>,
+    price_info_object: &PriceInfoObject,
+    clock: &Clock,
+    vault_state: VaultState,
+    max_age_secs: u64,
+    ctx: &mut TxContext,
+): LiquidationAuth {
     let (price, expo) = oracle_adapter::get_price(
         collateral_price_feed_id,
         price_info_object,
@@ -85,11 +140,10 @@ public fun authorize_liquidation(
     assert!(collateral_value > 0, ENotLiquidatable);
     let ltv_bps = ((vault_state.debt as u128) * 10000) / (collateral_value as u128);
     assert!(ltv_bps >= (vault_state.liquidation_threshold_bps as u128), ENotLiquidatable);
-    let auth = LiquidationAuth {
+    LiquidationAuth {
         id: sui::object::new(ctx),
         vault_id,
-    };
-    sui::transfer::transfer(auth, sender(ctx));
+    }
 }
 
 /// Compute collateral value in same scale as debt using oracle (price, expo). Uses u128 internally.
