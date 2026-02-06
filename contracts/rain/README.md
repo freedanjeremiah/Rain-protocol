@@ -20,12 +20,14 @@ Non-custodial P2P orderbook lending protocol on Sui. See repo root [readme.md](.
 | **Step 1.4** UserVault | Done | `sources/user_vault.move`: UserVault (owner, custody_id, collateral_balance, debt, liquidation_threshold_bps); `create_vault`, `deposit_collateral`; debt updated by LendingMarketplace. |
 | **Step 1.5** LoanOrder + LoanPosition | Done | `sources/marketplace.move`: BorrowOrder, LendOrder, LoanPosition (data only); getters and package mutators for partial fills. No matching logic yet. |
 | **Step 2.1** RiskEngine | Done | `sources/risk_engine.move`: `compute_ltv(vault, price, expo)`, `is_liquidatable(vault, price, expo)`. Read-only, no asset movement. |
-| **Step 2.2** LiquidationEngine | Done | `sources/liquidation.move`: `liquidate(user_vault, custody_vault, price_feed_id, PriceInfoObject, Clock, max_age_secs)` – RiskEngine check → Adjudicator auth → Custody release to liquidator. Selling via DeepBook is Phase 3. |
+| **Step 2.2** LiquidationEngine | Done | `sources/liquidation.move`: `liquidate(...)` – RiskEngine check → Adjudicator auth → Custody release to liquidator. |
+| **Step 3.1** DeepBook API (Phase 3) | Done | `sources/deepbook_adapter.move`: `swap_exact_base_for_quote<Base, Quote>(pool, base_in, deep_in, min_quote_out, clock, ctx)` – sell collateral (e.g. SUI) for quote (e.g. USDC) on DeepBook without BalanceManager. Pool IDs and SUI/USDC for liquidations: see `scripts/config/README.md` and [DeepBook SDK](https://docs.sui.io/standards/deepbookv3-sdk/pools). |
 
 - `Move.toml` – deps: local `deepbookv3` (deepbook, token); git Pyth (mainnet), Wormhole. Named address `rain = "0x0"`.
 - `sources/rain.move` – placeholder.
-- `sources/oracle_adapter.move`, `adjudicator.move`, `custody.move`, `user_vault.move`, `marketplace.move`, `risk_engine.move`, `liquidation.move` – as above.
+- `sources/oracle_adapter.move`, `adjudicator.move`, `custody.move`, `user_vault.move`, `marketplace.move`, `risk_engine.move`, `liquidation.move`, `deepbook_adapter.move` – as above.
 - `tests/*_tests.move` – unit tests for each module.
+- **Phase 3 flow**: Liquidator calls `rain::liquidation::liquidate` (receives `Coin<SUI>`), then in same or next tx calls `rain::deepbook_adapter::swap_exact_base_for_quote` with the SUI/USDC pool and DEEP for fees to receive USDC.
 
 ## Build & test
 

@@ -61,5 +61,6 @@ public fun liquidate(
     );
 
     custody::release_to_liquidator(custody_vault, auth, sender(ctx), ctx);
-    // Phase 3: liquidator receives Coin<SUI> here; sell via DeepBookAdapter / DeepBook when implemented.
+    // Phase 3: liquidator receives Coin<SUI> here. Sell via rain::deepbook_adapter::swap_exact_base_for_quote
+    // with the SUI/USDC pool and DEEP for fees (same tx or subsequent).
 }
