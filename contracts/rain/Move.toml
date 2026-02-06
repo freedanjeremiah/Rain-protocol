@@ -4,6 +4,7 @@ edition = "2024.beta"
 version = "0.1.0"
 
 [dependencies]
+# Path deps to local DeepBook and token (spec Step 0.2). Sui CLI uses "local" key for workspace deps.
 deepbook = { local = "../../deepbookv3/packages/deepbook" }
 token    = { local = "../../deepbookv3/packages/token", override = true }
 
