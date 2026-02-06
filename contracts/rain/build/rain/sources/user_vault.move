@@ -1,10 +1,12 @@
 /// UserVault: state and accounting per user. Does not hold collateral; Custody holds assets.
 /// Records custody_id, collateral_balance (mirror), debt, liquidation_threshold. Debt updated by LendingMarketplace.
+/// When debt = 0, owner may request RepaymentAuth from Adjudicator and then Custody release_to_owner.
 module rain::user_vault;
 
 use sui::coin::{Coin, value};
 use sui::sui::SUI;
 use sui::tx_context::sender;
+use rain::adjudicator;
 use rain::custody;
 use rain::custody::CustodyVault;
 
@@ -12,6 +14,7 @@ use rain::custody::CustodyVault;
 const ENotOwner: u64 = 1;
 const ECustodyMismatch: u64 = 2;
 const ERepayExceedsDebt: u64 = 3;
+const EDebtNotZero: u64 = 4;
 
 /// Owned object: state for one user's position. custody_id links to CustodyVault holding collateral.
 public struct UserVault has key, store {
@@ -99,6 +102,15 @@ public fun sync_collateral_from_custody(vault: &mut UserVault, custody_vault: &C
 /// Zero collateral mirror after liquidation (custody was released to liquidator). Package-only.
 public(package) fun zero_collateral_after_liquidation(vault: &mut UserVault) {
     vault.collateral_balance = 0;
+}
+
+/// When vault debt is 0, request RepaymentAuth from Adjudicator. Caller (owner) receives the auth;
+/// then call custody::release_to_owner(custody_vault, repayment_auth) to get collateral back.
+public fun request_repayment_auth(vault: &UserVault, ctx: &mut TxContext) {
+    assert!(sender(ctx) == vault.owner, ENotOwner);
+    assert!(vault.debt == 0, EDebtNotZero);
+    let proof = adjudicator::create_repayment_proof(sui::object::id(vault));
+    adjudicator::authorize_repayment(sui::object::id(vault), proof, ctx);
 }
 
 #[test_only]

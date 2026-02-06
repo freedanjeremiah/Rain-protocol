@@ -5,7 +5,7 @@
 module rain::marketplace;
 
 use sui::clock::Clock;
-use sui::coin::{Coin, split};
+use sui::coin::{Coin, split, value};
 use sui::table::{Self, Table};
 use sui::tx_context::sender;
 use pyth::price_info::PriceInfoObject;
@@ -23,6 +23,7 @@ const EFillAmount: u64 = 5;
 const ERateMismatch: u64 = 6;
 const EDurationMismatch: u64 = 7;
 const EBorrowLimitExceeded: u64 = 8;
+const EInsufficientCoin: u64 = 9;
 
 // === Order types (partial-fill aware) ===
 
@@ -331,6 +332,29 @@ public fun fill_order<T>(
         let LendOrder { id, .. } = removed_lend;
         sui::object::delete(id);
     };
+}
+
+// === Repayment: clear position and update vault debt ===
+
+/// Repay one position: borrower (vault owner) provides vault and coin; position is consumed (lender must have sent it to borrower).
+/// Principal is sent to position.lender; vault debt is reduced; position is destroyed.
+/// Marketplace does not hold funds.
+public fun repay_position<T>(
+    vault: &mut UserVault,
+    position: LoanPosition,
+    coin: &mut Coin<T>,
+    ctx: &mut TxContext,
+) {
+    assert!(sender(ctx) == user_vault::owner(vault), ENotBorrower);
+    assert!(position.vault_id == sui::object::id(vault), EVaultMismatch);
+    assert!(position.borrower == user_vault::owner(vault), ENotBorrower);
+    assert!(value(coin) >= position.principal, EInsufficientCoin);
+
+    user_vault::repay_debt(vault, position.principal);
+    let principal_coin = split(coin, position.principal, ctx);
+    sui::transfer::public_transfer(principal_coin, position.lender);
+    let LoanPosition { id, .. } = position;
+    sui::object::delete(id);
 }
 
 #[test_only]
