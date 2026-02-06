@@ -1,13 +1,37 @@
 /// Marketplace order and position data structures. Supports partial fills:
-/// filled_amount tracks sum of fills; each fill creates a LoanPosition. No matching logic yet.
+/// submit_borrow_order / submit_lend_order store orders in shared LendingMarketplace;
+/// fill_order matches and settles (principal lender→borrower, LoanPosition to lender, vault debt updated).
+/// Does not hold funds; RiskEngine enforces borrow limits before opening positions.
 module rain::marketplace;
+
+use sui::clock::Clock;
+use sui::coin::{Coin, split};
+use sui::table::{Self, Table};
+use sui::tx_context::sender;
+use pyth::price_info::PriceInfoObject;
+use rain::oracle_adapter;
+use rain::risk_engine;
+use rain::user_vault;
+use rain::user_vault::UserVault;
+
+// === Errors ===
+const ENotBorrower: u64 = 1;
+const ENotLender: u64 = 2;
+const EVaultMismatch: u64 = 3;
+const EOrderNotFound: u64 = 4;
+const EFillAmount: u64 = 5;
+const ERateMismatch: u64 = 6;
+const EDurationMismatch: u64 = 7;
+const EBorrowLimitExceeded: u64 = 8;
 
 // === Order types (partial-fill aware) ===
 
 /// Borrow order: total amount, filled_amount updated on each partial fill. remaining = amount - filled_amount.
+/// vault_id is the UserVault that will receive the debt on fill.
 public struct BorrowOrder has key, store {
     id: UID,
     borrower: address,
+    vault_id: ID,
     amount: u64,
     filled_amount: u64,
     max_interest_bps: u64,
@@ -59,6 +83,10 @@ public fun borrow_order_max_interest_bps(order: &BorrowOrder): u64 {
 
 public fun borrow_order_duration_secs(order: &BorrowOrder): u64 {
     order.duration_secs
+}
+
+public fun borrow_order_vault_id(order: &BorrowOrder): ID {
+    order.vault_id
 }
 
 // === Getters (LendOrder) ===
@@ -113,7 +141,7 @@ public fun loan_position_vault_id(pos: &LoanPosition): ID {
     pos.vault_id
 }
 
-// === Package-only mutators (for LendingMarketplace logic later) ===
+// === Package-only mutators and position creation ===
 
 public(package) fun borrow_order_add_filled(order: &mut BorrowOrder, fill_amount: u64) {
     order.filled_amount = order.filled_amount + fill_amount;
@@ -123,9 +151,192 @@ public(package) fun lend_order_add_filled(order: &mut LendOrder, fill_amount: u6
     order.filled_amount = order.filled_amount + fill_amount;
 }
 
+/// Create a LoanPosition (used on each fill). Caller transfers it to the lender.
+public(package) fun create_loan_position(
+    borrower: address,
+    lender: address,
+    principal: u64,
+    rate_bps: u64,
+    term_secs: u64,
+    vault_id: ID,
+    ctx: &mut TxContext,
+): LoanPosition {
+    LoanPosition {
+        id: sui::object::new(ctx),
+        borrower,
+        lender,
+        principal,
+        rate_bps,
+        term_secs,
+        vault_id,
+    }
+}
+
+// === Shared order book ===
+
+/// Shared order book: holds borrow and lend orders. Does not hold funds.
+public struct LendingMarketplace has key {
+    id: UID,
+    borrow_orders: Table<ID, BorrowOrder>,
+    lend_orders: Table<ID, LendOrder>,
+}
+
+fun init(ctx: &mut TxContext) {
+    let marketplace = LendingMarketplace {
+        id: sui::object::new(ctx),
+        borrow_orders: table::new(ctx),
+        lend_orders: table::new(ctx),
+    };
+    sui::transfer::share_object(marketplace);
+}
+
+// === Public order creation (user-facing) ===
+
+/// Create a borrow order for the given vault. Then call submit_borrow_order to list it.
+public fun create_borrow_order(
+    vault_id: ID,
+    amount: u64,
+    max_interest_bps: u64,
+    duration_secs: u64,
+    ctx: &mut TxContext,
+): BorrowOrder {
+    let sender = sender(ctx);
+    BorrowOrder {
+        id: sui::object::new(ctx),
+        borrower: sender,
+        vault_id,
+        amount,
+        filled_amount: 0,
+        max_interest_bps,
+        duration_secs,
+    }
+}
+
+/// Create a lend order. Then call submit_lend_order to list it.
+public fun create_lend_order(
+    amount: u64,
+    min_interest_bps: u64,
+    duration_secs: u64,
+    ctx: &mut TxContext,
+): LendOrder {
+    LendOrder {
+        id: sui::object::new(ctx),
+        lender: sender(ctx),
+        amount,
+        filled_amount: 0,
+        min_interest_bps,
+        duration_secs,
+    }
+}
+
+// === Submit orders (store in shared order book) ===
+
+/// Store a borrow order in the marketplace. Caller must be the borrower and own the vault.
+public fun submit_borrow_order(
+    marketplace: &mut LendingMarketplace,
+    vault: &UserVault,
+    order: BorrowOrder,
+    _ctx: &TxContext,
+) {
+    assert!(user_vault::owner(vault) == order.borrower, ENotBorrower);
+    assert!(sui::object::id(vault) == order.vault_id, EVaultMismatch);
+    let order_id = sui::object::id(&order);
+    table::add(&mut marketplace.borrow_orders, order_id, order);
+}
+
+/// Store a lend order in the marketplace. Caller must be the lender.
+public fun submit_lend_order(
+    marketplace: &mut LendingMarketplace,
+    order: LendOrder,
+    ctx: &TxContext,
+) {
+    assert!(sender(ctx) == order.lender, ENotLender);
+    let order_id = sui::object::id(&order);
+    table::add(&mut marketplace.lend_orders, order_id, order);
+}
+
+// === Fill (match and settle): principal lender→borrower, create LoanPosition, update vault debt ===
+
+/// Execute a partial fill between a borrow and lend order.
+/// Principal is transferred from lender (coin) to borrower (vault owner). LoanPosition is sent to lender.
+/// RiskEngine enforces borrow limit before adding debt. Rate/duration must be compatible.
+public fun fill_order<T>(
+    marketplace: &mut LendingMarketplace,
+    borrow_order_id: ID,
+    lend_order_id: ID,
+    fill_amount: u64,
+    lender_coin: &mut Coin<T>,
+    borrower_vault: &mut UserVault,
+    collateral_price_feed_id: vector<u8>,
+    price_info_object: &PriceInfoObject,
+    clock: &Clock,
+    max_age_secs: u64,
+    ctx: &mut TxContext,
+) {
+    assert!(table::contains(&marketplace.borrow_orders, borrow_order_id), EOrderNotFound);
+    assert!(table::contains(&marketplace.lend_orders, lend_order_id), EOrderNotFound);
+
+    let borrow_fully_filled;
+    let lend_fully_filled;
+    {
+        let borrow_order = table::borrow_mut(&mut marketplace.borrow_orders, borrow_order_id);
+        let lend_order = table::borrow_mut(&mut marketplace.lend_orders, lend_order_id);
+
+        let borrow_remaining = borrow_order.amount - borrow_order.filled_amount;
+        let lend_remaining = lend_order.amount - lend_order.filled_amount;
+        assert!(fill_amount <= borrow_remaining && fill_amount <= lend_remaining, EFillAmount);
+        assert!(borrow_order.max_interest_bps >= lend_order.min_interest_bps, ERateMismatch);
+        assert!(borrow_order.duration_secs == lend_order.duration_secs, EDurationMismatch);
+        assert!(borrow_order.vault_id == sui::object::id(borrower_vault), EVaultMismatch);
+
+        let (price, expo) = oracle_adapter::get_price(
+            collateral_price_feed_id,
+            price_info_object,
+            clock,
+            max_age_secs,
+        );
+        assert!(risk_engine::can_add_debt(borrower_vault, fill_amount, &price, &expo), EBorrowLimitExceeded);
+
+        let principal_coin = split(lender_coin, fill_amount, ctx);
+        let borrower = user_vault::owner(borrower_vault);
+        sui::transfer::public_transfer(principal_coin, borrower);
+
+        let rate_bps = lend_order.min_interest_bps;
+        let term_secs = lend_order.duration_secs;
+        let position = create_loan_position(
+            borrow_order.borrower,
+            lend_order.lender,
+            fill_amount,
+            rate_bps,
+            term_secs,
+            borrow_order.vault_id,
+            ctx,
+        );
+        sui::transfer::transfer(position, lend_order.lender);
+
+        borrow_order_add_filled(borrow_order, fill_amount);
+        lend_order_add_filled(lend_order, fill_amount);
+        borrow_fully_filled = borrow_order.filled_amount == borrow_order.amount;
+        lend_fully_filled = lend_order.filled_amount == lend_order.amount;
+        user_vault::add_debt(borrower_vault, fill_amount);
+    };
+
+    if (borrow_fully_filled) {
+        let removed_borrow = table::remove(&mut marketplace.borrow_orders, borrow_order_id);
+        let BorrowOrder { id, .. } = removed_borrow;
+        sui::object::delete(id);
+    };
+    if (lend_fully_filled) {
+        let removed_lend = table::remove(&mut marketplace.lend_orders, lend_order_id);
+        let LendOrder { id, .. } = removed_lend;
+        sui::object::delete(id);
+    };
+}
+
 #[test_only]
 public fun create_borrow_order_for_testing(
     borrower: address,
+    vault_id: ID,
     amount: u64,
     max_interest_bps: u64,
     duration_secs: u64,
@@ -134,6 +345,7 @@ public fun create_borrow_order_for_testing(
     BorrowOrder {
         id: sui::object::new(ctx),
         borrower,
+        vault_id,
         amount,
         filled_amount: 0,
         max_interest_bps,

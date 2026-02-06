@@ -67,3 +67,23 @@ public fun is_liquidatable(
     let threshold_bps = user_vault::liquidation_threshold_bps(vault);
     ltv_bps >= threshold_bps
 }
+
+/// True if adding `amount` to vault debt would keep LTV below liquidation threshold.
+/// Used by LendingMarketplace before opening a new position.
+public fun can_add_debt(
+    vault: &UserVault,
+    amount: u64,
+    price: &i64::I64,
+    expo: &i64::I64,
+): bool {
+    let collateral = user_vault::collateral_balance(vault);
+    let debt = user_vault::debt(vault);
+    let new_debt = debt + amount;
+    let cv = collateral_value_from_oracle(collateral, price, expo);
+    if (cv == 0) {
+        false
+    } else {
+        let ltv_bps = (((new_debt as u128) * 10000) / (cv as u128)) as u64;
+        ltv_bps < user_vault::liquidation_threshold_bps(vault)
+    }
+}
