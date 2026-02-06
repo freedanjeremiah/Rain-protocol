@@ -11,6 +11,12 @@ import { toast } from "sonner";
 
 const MIST_PER_SUI = 1_000_000_000;
 
+function formatMist(mist: string) {
+  const n = Number(mist);
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} SUI`;
+  return `${n} MIST`;
+}
+
 function DepositContent() {
   const searchParams = useSearchParams();
   const preselected = searchParams.get("vault") ?? "";
@@ -20,10 +26,11 @@ function DepositContent() {
   const [amountSui, setAmountSui] = useState("");
   const defaultVaultId = vaults.find((v) => v.objectId === preselected)?.objectId ?? vaults[0]?.objectId ?? "";
   const effectiveVaultId = selectedVaultId || defaultVaultId;
+  const selectedVault = vaults.find((v) => v.objectId === effectiveVaultId);
 
   const handleDeposit = async () => {
     const amountMist = Math.floor(parseFloat(amountSui || "0") * MIST_PER_SUI);
-    if (!effectiveVaultId || amountMist <= 0) {
+    if (!effectiveVaultId || !selectedVault?.custodyId || amountMist <= 0) {
       toast.error("Select a vault and enter amount.");
       return;
     }
@@ -32,7 +39,7 @@ function DepositContent() {
       return;
     }
     try {
-      await deposit(effectiveVaultId, String(amountMist));
+      await deposit(effectiveVaultId, selectedVault.custodyId, String(amountMist));
       toast.success("Deposit successful.");
       setAmountSui("");
       refetch();
@@ -49,7 +56,7 @@ function DepositContent() {
             Deposit
           </h1>
           <p className="mb-6 text-xs text-[var(--fg-dim)]">
-            Add SUI collateral to a custody vault. You need at least one vault
+            Add SUI collateral to a user vault. You need at least one vault
             (create one on the Vaults page).
           </p>
 
@@ -72,7 +79,8 @@ function DepositContent() {
                 >
                   {vaults.map((v) => (
                     <option key={v.objectId} value={v.objectId}>
-                      {v.objectId.slice(0, 8)}... ({v.balance} MIST)
+                      {v.objectId.slice(0, 8)}... · {formatMist(v.balance)} collateral
+                      {Number(v.debt) > 0 ? ` · ${formatMist(v.debt)} debt` : ""}
                     </option>
                   ))}
                 </select>

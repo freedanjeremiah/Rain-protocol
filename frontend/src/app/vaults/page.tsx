@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
@@ -17,17 +18,25 @@ function formatMist(mist: string) {
   return `${n} MIST`;
 }
 
+const DEFAULT_THRESHOLD_BPS = 8000; // 80%
+
 export default function VaultsPage() {
   const { vaults, isPending, refetch, isConfigured } = useOwnedVaults();
   const { createVault, isPending: isCreating } = useCreateVault();
+  const [liquidationBps, setLiquidationBps] = useState(String(DEFAULT_THRESHOLD_BPS));
 
   const handleCreate = async () => {
     if (!isConfigured) {
       toast.error("Set NEXT_PUBLIC_RAIN_PACKAGE_ID to create vaults.");
       return;
     }
+    const bps = Math.floor(Number(liquidationBps) || DEFAULT_THRESHOLD_BPS);
+    if (bps < 1000 || bps > 10000) {
+      toast.error("Liquidation threshold must be 1000–10000 bps (10–100%).");
+      return;
+    }
     try {
-      await createVault();
+      await createVault(bps);
       toast.success("Vault created.");
       refetch();
     } catch (e) {
@@ -43,8 +52,9 @@ export default function VaultsPage() {
             Vaults
           </h1>
           <p className="mb-6 text-xs text-[var(--fg-dim)]">
-            Create a custody vault to hold collateral. Then deposit SUI and use
-            it to borrow.
+            Create a user vault (with linked custody) to hold collateral. Set
+            the liquidation threshold in basis points (e.g. 8000 = 80%). Then
+            deposit SUI and use it to borrow.
           </p>
 
           {!isConfigured && (
@@ -54,7 +64,21 @@ export default function VaultsPage() {
             </div>
           )}
 
-          <div className="mb-8 flex flex-wrap gap-4">
+          <div className="mb-6 flex flex-wrap items-end gap-4">
+            <div>
+              <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
+                Liquidation threshold (bps)
+              </label>
+              <input
+                type="number"
+                min="1000"
+                max="10000"
+                value={liquidationBps}
+                onChange={(e) => setLiquidationBps(e.target.value)}
+                placeholder="8000"
+                className="pixel-border w-28 bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
+              />
+            </div>
             <button
               type="button"
               className="pixel-btn pixel-btn-accent"
@@ -92,6 +116,7 @@ export default function VaultsPage() {
                   </span>
                   <span className="text-xs text-[var(--fg-dim)]">
                     {formatMist(v.balance)} collateral
+                    {Number(v.debt) > 0 && ` · ${formatMist(v.debt)} debt`}
                   </span>
                   <Link
                     href={`/deposit?vault=${v.objectId}`}
