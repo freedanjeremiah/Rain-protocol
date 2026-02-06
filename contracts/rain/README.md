@@ -21,7 +21,8 @@ Non-custodial P2P orderbook lending protocol on Sui. See repo root [readme.md](.
 | **Step 1.5** LoanOrder + LoanPosition | Done | `sources/marketplace.move`: BorrowOrder, LendOrder, LoanPosition (data only); getters and package mutators for partial fills. No matching logic yet. |
 | **Step 2.1** RiskEngine | Done | `sources/risk_engine.move`: `compute_ltv(vault, price, expo)`, `is_liquidatable(vault, price, expo)`. Read-only, no asset movement. |
 | **Step 2.2** LiquidationEngine | Done | `sources/liquidation.move`: `liquidate(...)` – RiskEngine check → Adjudicator auth → Custody release to liquidator. |
-| **Step 3.1** DeepBook API (Phase 3) | Done | `sources/deepbook_adapter.move`: `swap_exact_base_for_quote<Base, Quote>(pool, base_in, deep_in, min_quote_out, clock, ctx)` – sell collateral (e.g. SUI) for quote (e.g. USDC) on DeepBook without BalanceManager. Pool IDs and SUI/USDC for liquidations: see `scripts/config/README.md` and [DeepBook SDK](https://docs.sui.io/standards/deepbookv3-sdk/pools). |
+| **Step 3.1** DeepBook API (Phase 3) | Done | Pool IDs and SUI/USDC for liquidations: see `scripts/config/README.md` and [DeepBook SDK](https://docs.sui.io/standards/deepbookv3-sdk/pools). |
+| **Step 3.2** DeepBookAdapter (Move) | Done | `sources/deepbook_adapter.move`: (1) **Swap**: `swap_exact_base_for_quote` and `sell_collateral_for_quote` – take Pool + Coin&lt;Base&gt; + Coin&lt;DEEP&gt;, return (leftover_base, quote_out, deep_change), emit `SwapExecuted` (pool_id, base_in, quote_out). (2) **Orders**: `place_limit_order` and `place_market_order` – take Pool, BalanceManager, TradeProof, order params; call deepbook::pool; return `OrderInfo` (fill info). No lending logic. |
 
 - `Move.toml` – deps: local `deepbookv3` (deepbook, token); git Pyth (mainnet), Wormhole. Named address `rain = "0x0"`.
 - `sources/rain.move` – placeholder.
