@@ -96,6 +96,11 @@ public fun sync_collateral_from_custody(vault: &mut UserVault, custody_vault: &C
     vault.collateral_balance = custody::balance_value(custody_vault);
 }
 
+/// Zero collateral mirror after liquidation (custody was released to liquidator). Package-only.
+public(package) fun zero_collateral_after_liquidation(vault: &mut UserVault) {
+    vault.collateral_balance = 0;
+}
+
 #[test_only]
 public fun create_vault_for_testing(
     custody_id: ID,

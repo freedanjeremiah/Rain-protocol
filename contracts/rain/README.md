@@ -22,13 +22,14 @@ Non-custodial P2P orderbook lending protocol on Sui. See repo root [readme.md](.
 | **Step 2.1** RiskEngine | Done | `sources/risk_engine.move`: `compute_ltv(vault, price, expo)`, `is_liquidatable(vault, price, expo)`. Read-only, no asset movement. |
 | **Step 2.2** LiquidationEngine | Done | `sources/liquidation.move`: `liquidate(...)` – RiskEngine check → Adjudicator auth → Custody release to liquidator. |
 | **Step 3.1** DeepBook API (Phase 3) | Done | Pool IDs and SUI/USDC for liquidations: see `scripts/config/README.md` and [DeepBook SDK](https://docs.sui.io/standards/deepbookv3-sdk/pools). |
-| **Step 3.2** DeepBookAdapter (Move) | Done | `sources/deepbook_adapter.move`: (1) **Swap**: `swap_exact_base_for_quote` and `sell_collateral_for_quote` – take Pool + Coin&lt;Base&gt; + Coin&lt;DEEP&gt;, return (leftover_base, quote_out, deep_change), emit `SwapExecuted` (pool_id, base_in, quote_out). (2) **Orders**: `place_limit_order` and `place_market_order` – take Pool, BalanceManager, TradeProof, order params; call deepbook::pool; return `OrderInfo` (fill info). No lending logic. |
+| **Step 3.2** DeepBookAdapter (Move) | Done | `sources/deepbook_adapter.move`: (1) **Swap**: `swap_exact_base_for_quote` and `sell_collateral_for_quote` – take Pool + Coin&lt;Base&gt; + Coin&lt;DEEP&gt;, return (leftover_base, quote_out, deep_change), emit `SwapExecuted`. (2) **Orders**: `place_limit_order` and `place_market_order` – take Pool, BalanceManager, TradeProof, order params; return `OrderInfo`. No lending logic. |
+| **Step 3.3** Wire LiquidationEngine to DeepBook | Done | Custody releases collateral to liquidator; liquidator calls `sell_collateral_and_settle` (same PTB): sells collateral on DeepBook via adapter, repays vault debt (min(debt, quote_out)), sends liquidator bonus (liquidator_bonus_bps of quote) to sender, remainder to vault owner; leftover base and DEEP to sender. `user_vault::zero_collateral_after_liquidation` called in `liquidate()` after release. |
 
 - `Move.toml` – deps: local `deepbookv3` (deepbook, token); git Pyth (mainnet), Wormhole. Named address `rain = "0x0"`.
 - `sources/rain.move` – placeholder.
 - `sources/oracle_adapter.move`, `adjudicator.move`, `custody.move`, `user_vault.move`, `marketplace.move`, `risk_engine.move`, `liquidation.move`, `deepbook_adapter.move` – as above.
 - `tests/*_tests.move` – unit tests for each module.
-- **Phase 3 flow**: Liquidator calls `rain::liquidation::liquidate` (receives `Coin<SUI>`), then in same or next tx calls `rain::deepbook_adapter::swap_exact_base_for_quote` with the SUI/USDC pool and DEEP for fees to receive USDC.
+- **Phase 3 flow (Step 3.3)**: In one PTB: (1) `rain::liquidation::liquidate` – custody releases `Coin<SUI>` to liquidator, vault collateral zeroed. (2) `rain::liquidation::sell_collateral_and_settle<SUI, USDC>` – liquidator passes that SUI + pool + DEEP; adapter sells for USDC; debt repaid, liquidator bonus to sender, remainder to vault owner; leftover SUI and DEEP to sender.
 
 ## Build & test
 
