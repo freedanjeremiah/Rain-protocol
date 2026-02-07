@@ -106,11 +106,23 @@ public(package) fun zero_collateral_after_liquidation(vault: &mut UserVault) {
 
 /// When vault debt is 0, request RepaymentAuth from Adjudicator. Caller (owner) receives the auth;
 /// then call custody::release_to_owner(custody_vault, repayment_auth) to get collateral back.
+/// Auth is bound to the linked CustodyVault (custody_id) so Custody can verify it.
 public fun request_repayment_auth(vault: &UserVault, ctx: &mut TxContext) {
     assert!(sender(ctx) == vault.owner, ENotOwner);
     assert!(vault.debt == 0, EDebtNotZero);
-    let proof = adjudicator::create_repayment_proof(sui::object::id(vault));
-    adjudicator::authorize_repayment(sui::object::id(vault), proof, ctx);
+    let custody_id = vault.custody_id;
+    let proof = adjudicator::create_repayment_proof(custody_id);
+    adjudicator::authorize_repayment(custody_id, proof, ctx);
+}
+
+#[test_only]
+/// Same as request_repayment_auth but returns RepaymentAuth (for E2E tests that then call release_to_owner).
+public fun request_repayment_auth_returning(vault: &UserVault, ctx: &mut TxContext): adjudicator::RepaymentAuth {
+    assert!(sender(ctx) == vault.owner, ENotOwner);
+    assert!(vault.debt == 0, EDebtNotZero);
+    let custody_id = vault.custody_id;
+    let proof = adjudicator::create_repayment_proof(custody_id);
+    adjudicator::authorize_repayment_returning(custody_id, proof, ctx)
 }
 
 #[test_only]

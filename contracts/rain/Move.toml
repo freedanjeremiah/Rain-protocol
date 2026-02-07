@@ -18,6 +18,10 @@ git = "https://github.com/wormhole-foundation/wormhole.git"
 subdir = "sui/wormhole"
 rev = "sui/mainnet"
 
+# Use Pyth testnet contract when publishing to testnet (no mainnet funds needed).
+[dep-replacements.testnet]
+Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/sui/contracts", rev = "sui-contract-testnet" }
+
 # Do not add explicit Sui dep; use toolchain default to avoid MoveStdlib version conflict with deepbook.
 
 [addresses]

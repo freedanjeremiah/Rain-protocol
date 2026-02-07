@@ -176,7 +176,7 @@ public(package) fun create_loan_position(
 // === Shared order book ===
 
 /// Shared order book: holds borrow and lend orders. Does not hold funds.
-public struct LendingMarketplace has key {
+public struct LendingMarketplace has key, store {
     id: UID,
     borrow_orders: Table<ID, BorrowOrder>,
     lend_orders: Table<ID, LendOrder>,
@@ -332,6 +332,83 @@ public fun fill_order<T>(
         let LendOrder { id, .. } = removed_lend;
         sui::object::delete(id);
     };
+}
+
+#[test_only]
+/// Create a LendingMarketplace for integration tests (not shared; test holds it).
+public fun create_marketplace_for_testing(ctx: &mut TxContext): LendingMarketplace {
+    LendingMarketplace {
+        id: sui::object::new(ctx),
+        borrow_orders: table::new(ctx),
+        lend_orders: table::new(ctx),
+    }
+}
+
+#[test_only]
+/// Same as fill_order but uses explicit price/expo (no oracle). Returns the created LoanPosition for E2E (repay step).
+public fun fill_order_for_testing<T>(
+    marketplace: &mut LendingMarketplace,
+    borrow_order_id: ID,
+    lend_order_id: ID,
+    fill_amount: u64,
+    lender_coin: &mut Coin<T>,
+    borrower_vault: &mut UserVault,
+    price: &pyth::i64::I64,
+    expo: &pyth::i64::I64,
+    ctx: &mut TxContext,
+): LoanPosition {
+    assert!(table::contains(&marketplace.borrow_orders, borrow_order_id), EOrderNotFound);
+    assert!(table::contains(&marketplace.lend_orders, lend_order_id), EOrderNotFound);
+
+    let position;
+    let borrow_fully_filled;
+    let lend_fully_filled;
+    {
+        let borrow_order = table::borrow_mut(&mut marketplace.borrow_orders, borrow_order_id);
+        let lend_order = table::borrow_mut(&mut marketplace.lend_orders, lend_order_id);
+
+        let borrow_remaining = borrow_order.amount - borrow_order.filled_amount;
+        let lend_remaining = lend_order.amount - lend_order.filled_amount;
+        assert!(fill_amount <= borrow_remaining && fill_amount <= lend_remaining, EFillAmount);
+        assert!(borrow_order.max_interest_bps >= lend_order.min_interest_bps, ERateMismatch);
+        assert!(borrow_order.duration_secs == lend_order.duration_secs, EDurationMismatch);
+        assert!(borrow_order.vault_id == sui::object::id(borrower_vault), EVaultMismatch);
+        assert!(risk_engine::can_add_debt(borrower_vault, fill_amount, price, expo), EBorrowLimitExceeded);
+
+        let principal_coin = split(lender_coin, fill_amount, ctx);
+        let borrower = user_vault::owner(borrower_vault);
+        sui::transfer::public_transfer(principal_coin, borrower);
+
+        let rate_bps = lend_order.min_interest_bps;
+        let term_secs = lend_order.duration_secs;
+        position = create_loan_position(
+            borrow_order.borrower,
+            lend_order.lender,
+            fill_amount,
+            rate_bps,
+            term_secs,
+            borrow_order.vault_id,
+            ctx,
+        );
+
+        borrow_order_add_filled(borrow_order, fill_amount);
+        lend_order_add_filled(lend_order, fill_amount);
+        borrow_fully_filled = borrow_order.filled_amount == borrow_order.amount;
+        lend_fully_filled = lend_order.filled_amount == lend_order.amount;
+        user_vault::add_debt(borrower_vault, fill_amount);
+    };
+
+    if (borrow_fully_filled) {
+        let removed_borrow = table::remove(&mut marketplace.borrow_orders, borrow_order_id);
+        let BorrowOrder { id, .. } = removed_borrow;
+        sui::object::delete(id);
+    };
+    if (lend_fully_filled) {
+        let removed_lend = table::remove(&mut marketplace.lend_orders, lend_order_id);
+        let LendOrder { id, .. } = removed_lend;
+        sui::object::delete(id);
+    };
+    position
 }
 
 // === Repayment: clear position and update vault debt ===

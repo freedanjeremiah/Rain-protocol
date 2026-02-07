@@ -1,0 +1,8 @@
+{
+  "network": "testnet",
+  "packageId": "0x0",
+  "lendingMarketplaceId": null,
+  "txDigest": null,
+  "publishedAt": null,
+  "_comment": "Run scripts/publish.ps1 (testnet) or publish.ts to populate; set frontend NEXT_PUBLIC_RAIN_PACKAGE_ID from packageId"
+}

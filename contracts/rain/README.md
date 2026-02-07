@@ -26,6 +26,7 @@ Non-custodial P2P orderbook lending protocol on Sui. See repo root [readme.md](.
 | **Step 3.3** Wire LiquidationEngine to DeepBook | Done | Custody releases collateral to liquidator; liquidator calls `sell_collateral_and_settle` (same PTB): sells collateral on DeepBook via adapter, repays vault debt (min(debt, quote_out)), sends liquidator bonus (liquidator_bonus_bps of quote) to sender, remainder to vault owner; leftover base and DEEP to sender. `user_vault::zero_collateral_after_liquidation` called in `liquidate()` after release. |
 | **Step 3.4** LendingMarketplace | Done | `sources/marketplace.move`: **Does not hold funds.** Shared `LendingMarketplace` (created in `init`) holds borrow/lend orders in tables. Entries: `create_borrow_order` / `create_lend_order` (user-facing), `submit_borrow_order(vault, order)` / `submit_lend_order(order)` store orders. `fill_order<T>(..., fill_amount, lender_coin, borrower_vault, oracle, clock, ...)`: in-Move match (rate/duration compatible, fill_size = min(remaining)); RiskEngine `can_add_debt` before opening position; principal lender→borrower (coin transfer to vault owner); create `LoanPosition` → lender; update both orders' `filled_amount`; `user_vault::add_debt`; remove and delete fully-filled orders. `risk_engine::can_add_debt` added for borrow-limit check. |
 | **Step 3.5** Repayment and Adjudicator | Done | **Repayment**: `marketplace::repay_position<T>(vault, position, coin)` – borrower (vault owner) passes vault and coin; position is consumed (lender sends position to borrower to repay). Principal sent to `position.lender`, `user_vault::repay_debt`, position destroyed. **When debt = 0**: `user_vault::request_repayment_auth(vault)` – owner gets `RepaymentAuth` from Adjudicator; then `custody::release_to_owner(custody_vault, repayment_auth)` returns collateral. |
+| **Step 4.1** Move unit tests | Done | **OracleAdapter**: module load + error code (real Pyth types; full E2E needs PriceInfoObject). **Adjudicator**: authorize_repayment when proof matches vault_id; expected_failure when proof is for wrong vault. **Custody**: release_to_owner rejects RepaymentAuth for wrong vault (EInvalidVault). **RiskEngine**: LTV and liquidation threshold (compute_ltv, is_liquidatable, can_add_debt). Run: `sui move test` in `contracts/rain`. |
 
 - `Move.toml` – deps: local `deepbookv3` (deepbook, token); git Pyth (mainnet), Wormhole. Named address `rain = "0x0"`.
 - `sources/rain.move` – placeholder.
@@ -43,6 +44,8 @@ sui move build
 sui move test
 ```
 
+From `deepbookv3` or when using path deps, use `--skip-fetch-latest-git-deps` with build if dependencies have not changed.
+
 If build fails with **"Error parsing ... Move.toml: expected `.`, `=`"** (Pyth and Wormhole use `Move.mainnet.toml`), run the fix script then build again:
 
 ```powershell
@@ -51,3 +54,21 @@ sui move build --allow-dirty
 ```
 
 Use `--skip-fetch-latest-git-deps` if dependencies haven’t changed.
+
+## Publish and complete (testnet / mainnet)
+
+1. **Publish** from `contracts/rain/scripts`:
+   ```powershell
+   .\publish.ps1                    # testnet
+   .\publish.ps1 -Env mainnet       # mainnet
+   ```
+   Or one-off: `sui client publish . --gas-budget 800000000 --allow-dirty -e testnet` from `contracts/rain`.
+
+2. **If you see "Failed to fetch package Pyth"**: the on-chain Pyth dependency is missing on the target network. Use `.\publish.ps1 -SkipDependencyVerification` or publish to the network where Pyth is deployed. See `scripts/config/README.md`.
+
+3. **After a successful publish**: the script writes `scripts/config/published.json` with `packageId` and `lendingMarketplaceId`. Set the frontend env:
+   ```bash
+   # frontend/.env
+   NEXT_PUBLIC_RAIN_PACKAGE_ID=<packageId from published.json>
+   ```
+   Restart the Next app so the vault/deposit pages use the deployed package.

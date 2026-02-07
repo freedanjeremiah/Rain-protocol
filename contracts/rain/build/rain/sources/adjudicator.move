@@ -73,6 +73,17 @@ public fun authorize_repayment(
     sui::transfer::transfer(auth, sender(ctx));
 }
 
+#[test_only]
+/// Same as authorize_repayment but returns RepaymentAuth (for tests that need to pass auth to Custody).
+public fun authorize_repayment_returning(vault_id: ID, proof: RepaymentProof, ctx: &mut TxContext): RepaymentAuth {
+    assert!(proof.vault_id == vault_id, EInvalidProof);
+    let RepaymentProof { vault_id: _ } = proof;
+    RepaymentAuth {
+        id: sui::object::new(ctx),
+        vault_id,
+    }
+}
+
 /// Verify LTV >= liquidation threshold using oracle price and vault state; if valid, create and transfer LiquidationAuth to sender.
 /// Uses OracleAdapter for price; computes collateral_value from price/expo and checks debt/collateral_value >= threshold.
 public fun authorize_liquidation(
@@ -115,6 +126,29 @@ public(package) fun authorize_liquidation_returning(
         max_age_secs,
         ctx,
     )
+}
+
+#[test_only]
+/// Create LiquidationAuth using explicit price/expo (no oracle). For E2E tests without Pyth.
+public fun authorize_liquidation_returning_for_testing(
+    vault_id: ID,
+    vault_state: VaultState,
+    price: &i64::I64,
+    expo: &i64::I64,
+    ctx: &mut TxContext,
+): LiquidationAuth {
+    let collateral_value = collateral_value_from_oracle(
+        vault_state.collateral_amount,
+        price,
+        expo,
+    );
+    assert!(collateral_value > 0, ENotLiquidatable);
+    let ltv_bps = ((vault_state.debt as u128) * 10000) / (collateral_value as u128);
+    assert!(ltv_bps >= (vault_state.liquidation_threshold_bps as u128), ENotLiquidatable);
+    LiquidationAuth {
+        id: sui::object::new(ctx),
+        vault_id,
+    }
 }
 
 fun authorize_liquidation_internal(

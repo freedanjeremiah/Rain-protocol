@@ -8,6 +8,12 @@ use pyth::price_info::PriceInfoObject;
 
 const EInvalidPriceFeedId: u64 = 0;
 
+#[test_only]
+/// Expose error code for unit tests (OracleAdapter asserts feed id match; real Pyth integration needs PriceInfoObject).
+public fun get_invalid_price_feed_id_error_code(): u64 {
+    EInvalidPriceFeedId
+}
+
 /// Returns (price, exponent) for the given price feed. Asserts the PriceInfoObject's feed id matches.
 /// `max_age_secs`: max age of price in seconds (e.g. 60).
 public fun get_price(
