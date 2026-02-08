@@ -13,7 +13,9 @@
       "Bash(npm show:*)",
       "WebFetch(domain:docs.pyth.network)",
       "Bash(python -c:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

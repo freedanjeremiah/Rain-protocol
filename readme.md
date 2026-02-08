@@ -1,7 +1,26 @@
 
-# 📌 Rain
+#💧 Rain
 
-**We fix fake P2P.** Most “P2P” lending still depends on CEXs for rates and keeper bots for liquidations. Rain runs rate discovery and liquidation execution on Sui’s DeepBook — no CEX, no off-chain keepers. Real peer-to-peer, on-chain.
+**Peer-to-peer lending with zero trust assumptions.** No pooled liquidity. No keeper bots. No CEX price feeds. Rain settles every rate, every fill, and every liquidation through DeepBook and Pyth — fully on-chain, fully non-custodial, built on Sui.
+
+---
+
+# DEPLOYED CONTRACT
+
+**Network:** Sui Testnet
+
+| Key | Value |
+|-----|-------|
+| **Original Package ID** | `0x46866743cab6b7174895be4848c598db76101dddef61962223971b853a3f0701` |
+| **Latest Package ID** | `0x40303a5f8f5e84d5769523dad6c5ca8334974112026eb3374572d8e25d8af01b` |
+| LendingMarketplace (shared) | `0x0dfb245d338b3568c00e45e313d412685b5159251d5ed1dea6ca708c8f93fc28` |
+| UpgradeCap | `0xa0302a33ae12a8aa1a40ba76ff429fc49c4df0b58bd4f0a73f8681a4e96aef2d` |
+| Pyth SUI/USD PriceInfoObject | `0x1ebb295c789cc42b3b2a1606482cd1c7124076a0f5676718501fda8c7fd075a0` |
+| Pyth State | `0x243759059f4c3111179da5878c12f68d612c21a8d54d85edc86164bb18be1c7c` |
+| Wormhole State | `0x31358d198147da50db32eda2562951d53973a0c0ad5ed738e9b17d88b213d790` |
+| DeepBook SUI/USDC Pool | `0x1c19362ca52b8ffd7a33cee805a67d40f31e6ba303753fd3a4cfdfacea7163a5` |
+
+> **Note on upgrades:** After a Sui package upgrade, struct types on objects always reference the **original** package ID, while function call targets must use the **latest** package ID. The frontend uses `NEXT_PUBLIC_RAIN_PACKAGE_ID` (latest) for transaction calls and `NEXT_PUBLIC_RAIN_ORIGINAL_PACKAGE_ID` (original) for type queries.
 
 ---
 
@@ -52,9 +71,9 @@ This breaks the promise of DeFi.
 
 ---
 
-# 2️⃣ SOLUTION (one sentence)
+# 2️⃣ SOLUTION 
 
-> **Build a fully on-chain, non-custodial P2P lending marketplace on Sui where interest rates and liquidation execution are discovered through DeepBook orderbooks, while risk is secured using decentralized oracles. User funds are held in a custody contract and move only on rule satisfaction or adjudicator authorization (no protocol key can unilaterally move assets).**
+> **A fully on-chain, non-custodial P2P lending marketplace on Sui where interest rates and liquidation execution are discovered through DeepBook orderbooks, while risk is secured using decentralized oracles. User funds are held in a custody contract and move only on rule satisfaction or adjudicator authorization (no protocol key can unilaterally move assets).**
 
 ---
 
@@ -69,7 +88,7 @@ This breaks the promise of DeFi.
 7. **Partial fills** – borrow and lend orders may be filled in multiple matches; each fill creates a loan position; vault debt is the sum of all positions
 8. **Composable, censorship-resistant**
 
-**Note:** DeepBook DEX integrations are on **mainnet**; Rain’s DeepBookAdapter and deployment config target mainnet for pool IDs and execution.
+**Note:** Rain currently targets **Sui Testnet** with DeepBook V3 testnet pools. The architecture is mainnet-ready — only pool IDs and Pyth endpoints change.
 
 ---
 
@@ -130,7 +149,7 @@ No admin keys. No trusted relayers.
 
 # 6️⃣ CONTRACTS (VERY IMPORTANT)
 
-You will have **10 core contracts/modules**.
+**11 Move modules** (9 core + `rain` init + `i64` utility).
 
 ---
 
@@ -198,16 +217,16 @@ Coordinates:
 
 ### Interacts with
 
-* DeepBook (mainnet)
+* DeepBook
 * UserVault
 
 ---
 
-## 3. `LoanOrder` (data structure)
+## 3. Order & Position types (defined in `marketplace.move`)
 
 ### Purpose
 
-Standardizes loan intents. Orders support **partial fills**: `filled_amount` and `remaining` are updated on each match until the order is fully filled or cancelled.
+Standardizes loan intents. Orders support **partial fills**: `filled_amount` and `remaining` are updated on each match until the order is fully filled or cancelled. These structs live inside the `marketplace` module, not a separate file.
 
 ### Borrow Order
 
@@ -246,7 +265,7 @@ Each partial fill creates a **LoanPosition** (borrower, lender, principal = fill
 
 ### Purpose
 
-Acts as a **thin adapter**, not a relayer. Integrates with **DeepBook on mainnet** (DEX integrations are mainnet).
+Acts as a **thin adapter**, not a relayer. Integrates with **DeepBook V3**.
 
 ### Responsibilities
 
@@ -262,7 +281,7 @@ Acts as a **thin adapter**, not a relayer. Integrates with **DeepBook on mainnet
 
 ### Interacts with
 
-* DeepBook (mainnet)
+* DeepBook
 * LendingMarketplace
 
 ---
@@ -449,7 +468,7 @@ struct FillRequest has key, store {
 1. User deposits collateral into **Custody** (linked to UserVault)
 2. RiskEngine checks health
 3. User submits BorrowOrder (amount, max_interest, duration)
-4. Order goes to DeepBook (mainnet)
+4. Order goes to DeepBook
 5. Lender order(s) match – **partial fills enabled**: each fill updates both orders’ `filled_amount`, creates a **LoanPosition**, moves principal lender → borrower
 6. Vault debt = sum of all position principals (and interest); repeat until order fully filled or cancelled
 
@@ -459,7 +478,7 @@ struct FillRequest has key, store {
 
 1. Lender submits LendOrder (amount, min_interest, duration)
 2. Funds locked temporarily (Custody or escrow as designed)
-3. DeepBook (mainnet) matches with borrower(s) – **partial fills**: lend order can fill across multiple borrow orders
+3. DeepBook matches with borrower(s) – **partial fills**: lend order can fill across multiple borrow orders
 4. Each fill creates a LoanPosition; interest accrues per position over time
 
 ---
@@ -515,7 +534,7 @@ Rain supports two fill paths:
 
 # 9️⃣ WHY THIS MAXIMIZES SUI CAPABILITIES
 
-✅ DeepBook as core infra (mainnet)
+✅ DeepBook V3 as core infra
 ✅ Partial fills for borrow/lend orders
 ✅ Escrow fill flow (async lender-first fills via shared objects)
 ✅ Parallel execution
@@ -524,20 +543,5 @@ Rain supports two fill paths:
 ✅ No centralized actors
 
 This is **not portable** to Ethereum easily.
-
----
-
-# 🔟 DEPLOYED CONTRACT
-
-**Network:** Sui Testnet
-
-| Key | Value |
-|-----|-------|
-| Original Package ID | `0x46866743cab6b7174895be4848c598db76101dddef61962223971b853a3f0701` |
-| Latest Package ID | `0x40303a5f8f5e84d5769523dad6c5ca8334974112026eb3374572d8e25d8af01b` |
-| LendingMarketplace (shared) | `0x0dfb245d338b3568c00e45e313d412685b5159251d5ed1dea6ca708c8f93fc28` |
-| UpgradeCap | `0xa0302a33ae12a8aa1a40ba76ff429fc49c4df0b58bd4f0a73f8681a4e96aef2d` |
-
-> **Note on upgrades:** After a Sui package upgrade, struct types on objects always reference the **original** package ID, while function call targets must use the **latest** package ID. The frontend uses `NEXT_PUBLIC_RAIN_PACKAGE_ID` (latest) for transaction calls and `NEXT_PUBLIC_RAIN_ORIGINAL_PACKAGE_ID` (original) for type queries.
 
 

@@ -78,7 +78,9 @@ export default function EscrowPage() {
 
           {tab === "complete" && <BorrowerStepper currentStep={4} />}
 
-          {tab === "commit" && <CommitTab />}
+          {tab === "commit" && (
+            <CommitTab userAddress={account?.address ?? ""} />
+          )}
           {tab === "complete" && (
             <CompleteTab userAddress={account?.address ?? ""} />
           )}
@@ -95,7 +97,7 @@ export default function EscrowPage() {
 /*  Tab 1: Lender Commit Fill                                         */
 /* ------------------------------------------------------------------ */
 
-function CommitTab() {
+function CommitTab({ userAddress }: { userAddress: string }) {
   const { commitFill, isPending } = useLenderCommitFill();
   const {
     borrowOrders,
@@ -103,6 +105,9 @@ function CommitTab() {
     isPending: loadingOrders,
     refetch,
   } = useMarketplaceOrders();
+
+  // Only show lend orders belonging to the connected wallet
+  const myLendOrders = lendOrders.filter((o) => o.lender === userAddress);
 
   const [selectedBorrow, setSelectedBorrow] = useState("");
   const [selectedLend, setSelectedLend] = useState("");
@@ -166,8 +171,11 @@ function CommitTab() {
         <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
           Your Lend Order
         </label>
-        {lendOrders.length === 0 ? (
-          <p className="text-xs text-[var(--fg-dim)]">No open lend orders</p>
+        {myLendOrders.length === 0 ? (
+          <p className="text-xs text-[var(--fg-dim)]">
+            No open lend orders for your wallet.{" "}
+            {lendOrders.length > 0 && `(${lendOrders.length} from other lenders)`}
+          </p>
         ) : (
           <select
             value={selectedLend}
@@ -175,7 +183,7 @@ function CommitTab() {
             className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
           >
             <option value="">-- select --</option>
-            {lendOrders.map((o) => (
+            {myLendOrders.map((o) => (
               <option key={o.objectId} value={o.objectId}>
                 {o.objectId.slice(0, 10)}... | {o.remaining} remaining |{" "}
                 {Number(o.minInterestBps) / 100}% min

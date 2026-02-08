@@ -11,6 +11,34 @@ import {
 import { RAIN, SUI_CLOCK } from "@/lib/rain";
 import { useInvalidateAfterTx } from "./useRainMutation";
 
+/**
+ * Fetch fresh Pyth price update from Hermes and prepend the
+ * update_price_feeds commands to the transaction.  Must be called
+ * before any Move call that reads a Pyth price (liquidate, fill, etc.).
+ */
+async function updatePythPriceInTx(
+  tx: Transaction,
+  suiClient: ReturnType<typeof useSuiClient>,
+): Promise<void> {
+  const connection = new SuiPriceServiceConnection(
+    RAIN.pyth.testnet.hermesUrl,
+  );
+  const feedId = ("0x" + RAIN.pyth.suiUsdFeedId) as `0x${string}`;
+  const raw = await connection.getPriceFeedsUpdateData([feedId]);
+  // Hermes returns Uint8Arrays in the browser; the SDK internally calls
+  // readUint8() which only exists on Node Buffer, so re-wrap each entry.
+  const updates = raw.map((u) => Buffer.from(u));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pythClient = new SuiPythClient(
+    suiClient as any,
+    RAIN.pyth.testnet.pythStateId,
+    RAIN.pyth.testnet.wormholeStateId,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await pythClient.updatePriceFeeds(tx as any, updates, [feedId]);
+}
+
 const DEFAULT_LIQUIDATION_THRESHOLD_BPS = 8000; // 80%
 const DAYS_TO_SECS = 86_400;
 
@@ -207,6 +235,7 @@ export function useRepayPosition() {
 export function useFillOrder() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
   const invalidate = useInvalidateAfterTx(["marketplaceOrders", "ownedVaults", "ownedPositions"]);
 
   const fillOrder = useCallback(
@@ -225,6 +254,10 @@ export function useFillOrder() {
       }
 
       const tx = new Transaction();
+
+      // Fetch fresh price from Hermes and update on-chain before reading
+      await updatePythPriceInTx(tx, suiClient);
+
       const feedBytes = Array.from(
         Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
@@ -250,7 +283,7 @@ export function useFillOrder() {
       invalidate();
       return result;
     },
-    [signAndExecute, invalidate],
+    [signAndExecute, suiClient, invalidate],
   );
 
   return { fillOrder, isPending };
@@ -390,6 +423,7 @@ export function useTransferPosition() {
 export function useLiquidate() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
   const invalidate = useInvalidateAfterTx(["ownedVaults"]);
 
   const liquidate = useCallback(
@@ -401,6 +435,9 @@ export function useLiquidate() {
       maxAgeSecs: number = 60,
     ) => {
       const tx = new Transaction();
+
+      // Fetch fresh price from Hermes and update on-chain before reading
+      await updatePythPriceInTx(tx, suiClient);
 
       const feedBytes = Array.from(
         Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
@@ -422,7 +459,7 @@ export function useLiquidate() {
       invalidate();
       return result;
     },
-    [signAndExecute, invalidate],
+    [signAndExecute, suiClient, invalidate],
   );
 
   return { liquidate, isPending };
@@ -474,6 +511,7 @@ export function useLenderCommitFill() {
 export function useBorrowerCompleteFill() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
   const invalidate = useInvalidateAfterTx(["fillRequests", "ownedVaults", "ownedPositions"]);
 
   const completeFill = useCallback(
@@ -490,6 +528,10 @@ export function useBorrowerCompleteFill() {
       }
 
       const tx = new Transaction();
+
+      // Fetch fresh price from Hermes and update on-chain before reading
+      await updatePythPriceInTx(tx, suiClient);
+
       const feedBytes = Array.from(
         Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
@@ -510,7 +552,7 @@ export function useBorrowerCompleteFill() {
       invalidate();
       return result;
     },
-    [signAndExecute, invalidate],
+    [signAndExecute, suiClient, invalidate],
   );
 
   return { completeFill, isPending };

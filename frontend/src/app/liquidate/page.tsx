@@ -10,6 +10,7 @@ import {
 import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import { RAIN } from "@/lib/rain";
 import { toast } from "sonner";
+import { SuiPriceServiceConnection } from "@pythnetwork/pyth-sui-js";
 
 interface DiscoveredVault {
   objectId: string;
@@ -240,6 +241,25 @@ export default function LiquidatePage() {
       setDiscovering(true);
       setDiscoveredVaults([]);
       try {
+        // Fetch live Pyth SUI/USD price from Hermes for accurate LTV
+        let oraclePrice = 0; // USD per 1 SUI (float)
+        try {
+          const conn = new SuiPriceServiceConnection(
+            RAIN.pyth.testnet.hermesUrl,
+          );
+          const feedId = "0x" + RAIN.pyth.suiUsdFeedId;
+          const res = await conn.getLatestPriceUpdates([feedId], {
+            parsed: true,
+          });
+          const parsed = res?.parsed;
+          if (parsed && parsed.length > 0) {
+            const p = parsed[0].price;
+            oraclePrice = Number(p.price) * Math.pow(10, p.expo);
+          }
+        } catch {
+          // Fall back to raw ratio if Hermes is unavailable
+        }
+
         const resp = await client.getOwnedObjects({
           owner: addr,
           filter: { StructType: RAIN.userVault.type },
@@ -265,12 +285,25 @@ export default function LiquidatePage() {
 
           const collNum = Number(collateral);
           const debtNum = Number(debt);
-          const ltvBps =
-            collNum > 0
-              ? Math.floor((debtNum / collNum) * 10000)
-              : debtNum > 0
-                ? 99999
-                : 0;
+
+          let ltvBps: number;
+          if (oraclePrice > 0 && collNum > 0) {
+            // collateral is in MIST (1e9 per SUI)
+            const collateralValueUsd = (collNum / 1e9) * oraclePrice;
+            ltvBps =
+              collateralValueUsd > 0
+                ? Math.floor((debtNum / collateralValueUsd) * 10000)
+                : debtNum > 0
+                  ? 99999
+                  : 0;
+          } else {
+            ltvBps =
+              collNum > 0
+                ? Math.floor((debtNum / collNum) * 10000)
+                : debtNum > 0
+                  ? 99999
+                  : 0;
+          }
           const isLiquidatable =
             ltvBps >= Number(thresholdBps) && debtNum > 0;
 
@@ -328,9 +361,9 @@ export default function LiquidatePage() {
               Find Liquidatable Vaults
             </h2>
             <p className="mb-3 text-xs text-[var(--fg-dim)]">
-              Search by owner address. Vaults with approximate LTV above
-              threshold (without oracle) are flagged. Actual liquidatability
-              depends on oracle price.
+              Search by owner address. LTV is computed using the live Pyth
+              SUI/USD oracle price. Vaults at or above their threshold are
+              flagged as liquidatable.
             </p>
             <div className="flex gap-2">
               <input
@@ -385,7 +418,7 @@ export default function LiquidatePage() {
                           </p>
                           <p>
                             <span className="text-[var(--fg-dim)]">
-                              LTV (approx):
+                              LTV (oracle):
                             </span>{" "}
                             {(v.ltvBps / 100).toFixed(1)}% / threshold{" "}
                             {(Number(v.thresholdBps) / 100).toFixed(0)}%
