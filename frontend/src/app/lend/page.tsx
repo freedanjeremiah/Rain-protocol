@@ -3,19 +3,36 @@
 import { useState } from "react";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
+import { useSubmitLendOrder } from "@/hooks/useRainTransactions";
+import { isMarketplaceConfigured } from "@/lib/rain";
 import { toast } from "sonner";
 
 export default function LendPage() {
+  const { submitLendOrder, isPending } = useSubmitLendOrder();
   const [amount, setAmount] = useState("");
   const [minRateBps, setMinRateBps] = useState("300"); // 3%
   const [durationDays, setDurationDays] = useState("30");
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!amount) {
       toast.error("Enter amount.");
       return;
     }
-    toast.info("Lend order submission will be available when LendingMarketplace is deployed.");
+    if (!isMarketplaceConfigured()) {
+      toast.error("LendingMarketplace not configured.");
+      return;
+    }
+    try {
+      await submitLendOrder(
+        Number(amount),
+        Number(minRateBps),
+        Number(durationDays),
+      );
+      toast.success("Lend order submitted!");
+      setAmount("");
+    } catch (e: unknown) {
+      toast.error(`Lend failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   return (
@@ -26,7 +43,7 @@ export default function LendPage() {
             Lend
           </h1>
           <p className="mb-6 text-xs text-[var(--fg-dim)]">
-            Submit a lend order. DeepBook matches with borrowers. You earn interest over time.
+            Submit a lend order. Borrowers can be matched with your offer. You earn interest over time.
           </p>
 
           <div className="space-y-6">
@@ -68,8 +85,9 @@ export default function LendPage() {
               type="button"
               className="pixel-btn pixel-btn-accent"
               onClick={handleSubmit}
+              disabled={isPending}
             >
-              Submit lend order
+              {isPending ? "Submitting..." : "Submit lend order"}
             </button>
           </div>
         </div>
