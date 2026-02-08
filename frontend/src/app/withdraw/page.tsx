@@ -133,7 +133,7 @@ export default function WithdrawPage() {
                 <p>
                   Auth:{" "}
                   {matchingAuth ? (
-                    <span className="text-green-400">
+                    <span className="text-sky-400">
                       Ready ({matchingAuth.objectId.slice(0, 12)}...)
                     </span>
                   ) : (

@@ -60,14 +60,17 @@ export default function HomePage() {
     <Layout activePage="home">
       {/* Hero */}
       <section className="flex flex-col items-center justify-center gap-8 px-6 py-16 text-center">
-        <Image
-          src="/rain-logo-hero.png"
-          alt="Rain"
-          width={280}
-          height={120}
-          className="h-20 w-auto sm:h-28"
-          priority
-        />
+        <span className="flex h-40 w-72 items-center justify-center overflow-hidden sm:h-52 sm:w-96">
+          <Image
+            src="/images/rain-logo-hero.png"
+            alt="Rain"
+            width={560}
+            height={240}
+            className="h-full w-auto scale-110 object-contain object-center"
+            priority
+            unoptimized
+          />
+        </span>
         <p className="max-w-xl text-xs leading-relaxed text-[var(--fg-dim)] sm:text-sm">
           Peer-to-peer lending on Sui. Rate discovery and liquidation execution
           both use DeepBook — no CEX dependency, no off-chain keepers.
@@ -101,6 +104,9 @@ export default function HomePage() {
           <h3 className="mb-3 text-center text-[0.65rem] uppercase tracking-wider text-[var(--fg-dim)] sm:text-xs">
             Two ways to fill orders
           </h3>
+          <p className="mb-3 text-center text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+            Partial fills are supported: orders can be filled in multiple chunks by one or more lenders — you don’t need to match a single counterparty for the full size.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="pixel-border bg-[var(--panel)] p-4">
               <p className="mb-1 text-[0.65rem] font-medium uppercase text-[var(--fg)] sm:text-xs">
@@ -132,6 +138,41 @@ export default function HomePage() {
                 Go to Escrow &rarr;
               </Link>
             </div>
+          </div>
+        </div>
+
+        {/* High level Rain — Architecture (left) & Oracle updates (right), both enlarged */}
+        <div className="mx-auto mt-12 w-full max-w-[128rem] px-2">
+          <h3 className="mb-4 text-center text-xs font-medium uppercase tracking-wider text-[var(--fg)] sm:text-sm">
+            High level Rain
+          </h3>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[2fr_1fr]">
+            <figure className="flex flex-col items-center">
+              <Image
+                src="/images/archi.jpeg"
+                alt="Rain architecture"
+                width={1600}
+                height={1120}
+                className="w-full max-w-full rounded border-2 border-[var(--border)] object-contain"
+                unoptimized
+              />
+              <figcaption className="mt-2 text-center text-[0.65rem] uppercase tracking-wider text-[var(--fg-dim)] sm:text-xs">
+                Architecture
+              </figcaption>
+            </figure>
+            <figure className="flex flex-col items-center">
+              <Image
+                src="/images/oracle-updates.jpeg"
+                alt="Rain oracle updates"
+                width={1200}
+                height={800}
+                className="w-full max-w-full rounded border-2 border-[var(--border)] object-contain"
+                unoptimized
+              />
+              <figcaption className="mt-2 text-center text-[0.65rem] uppercase tracking-wider text-[var(--fg-dim)] sm:text-xs">
+                Oracle updates
+              </figcaption>
+            </figure>
           </div>
         </div>
       </section>

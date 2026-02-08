@@ -374,7 +374,7 @@ function RequestsTab({ userAddress }: { userAddress: string }) {
                       ? "border-yellow-500/50 bg-yellow-500/10"
                       : "bg-[var(--panel)]"
                     : r.status === 1
-                      ? "border-green-500/30 bg-green-500/5"
+                      ? "border-sky-500/30 bg-sky-500/5"
                       : "border-red-500/30 bg-red-500/5"
                 }`}
               >
