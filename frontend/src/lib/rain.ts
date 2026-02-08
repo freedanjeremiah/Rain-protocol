@@ -3,6 +3,9 @@
  * NEXT_PUBLIC_LENDING_MARKETPLACE_ID after deploying contracts.
  */
 const PACKAGE_ID = process.env.NEXT_PUBLIC_RAIN_PACKAGE_ID ?? "0x0";
+/** Original (first-published) package ID — struct types always reference this after upgrades */
+const ORIGINAL_PACKAGE_ID =
+  process.env.NEXT_PUBLIC_RAIN_ORIGINAL_PACKAGE_ID || PACKAGE_ID;
 const MARKETPLACE_ID =
   process.env.NEXT_PUBLIC_LENDING_MARKETPLACE_ID ?? "0x0";
 const PYTH_SUI_USD_PRICE_OBJECT =
@@ -22,27 +25,27 @@ export const RAIN = {
 
   userVault: {
     module: "user_vault",
-    type: `${PACKAGE_ID}::user_vault::UserVault`,
+    type: `${ORIGINAL_PACKAGE_ID}::user_vault::UserVault`,
     createVault: `${PACKAGE_ID}::user_vault::create_vault`,
     depositCollateral: `${PACKAGE_ID}::user_vault::deposit_collateral`,
     requestRepaymentAuth: `${PACKAGE_ID}::user_vault::request_repayment_auth`,
   },
 
   custody: {
-    type: `${PACKAGE_ID}::custody::CustodyVault`,
+    type: `${ORIGINAL_PACKAGE_ID}::custody::CustodyVault`,
     releaseToOwner: `${PACKAGE_ID}::custody::release_to_owner`,
   },
 
   adjudicator: {
-    repaymentAuthType: `${PACKAGE_ID}::adjudicator::RepaymentAuth`,
+    repaymentAuthType: `${ORIGINAL_PACKAGE_ID}::adjudicator::RepaymentAuth`,
     authorizeLiquidation: `${PACKAGE_ID}::adjudicator::authorize_liquidation`,
   },
 
   marketplace: {
-    type: `${PACKAGE_ID}::marketplace::LendingMarketplace`,
-    borrowOrderType: `${PACKAGE_ID}::marketplace::BorrowOrder`,
-    lendOrderType: `${PACKAGE_ID}::marketplace::LendOrder`,
-    loanPositionType: `${PACKAGE_ID}::marketplace::LoanPosition`,
+    type: `${ORIGINAL_PACKAGE_ID}::marketplace::LendingMarketplace`,
+    borrowOrderType: `${ORIGINAL_PACKAGE_ID}::marketplace::BorrowOrder`,
+    lendOrderType: `${ORIGINAL_PACKAGE_ID}::marketplace::LendOrder`,
+    loanPositionType: `${ORIGINAL_PACKAGE_ID}::marketplace::LoanPosition`,
     createBorrowOrder: `${PACKAGE_ID}::marketplace::create_borrow_order`,
     submitBorrowOrder: `${PACKAGE_ID}::marketplace::submit_borrow_order`,
     createLendOrder: `${PACKAGE_ID}::marketplace::create_lend_order`,
@@ -57,11 +60,11 @@ export const RAIN = {
   },
 
   escrow: {
-    fillRequestType: `${PACKAGE_ID}::escrow::FillRequest`,
+    fillRequestType: `${ORIGINAL_PACKAGE_ID}::escrow::FillRequest`,
     lenderCommitFill: `${PACKAGE_ID}::escrow::lender_commit_fill`,
     borrowerCompleteFill: `${PACKAGE_ID}::escrow::borrower_complete_fill`,
     lenderCancelFill: `${PACKAGE_ID}::escrow::lender_cancel_fill`,
-    fillRequestCreatedEvent: `${PACKAGE_ID}::escrow::FillRequestCreated`,
+    fillRequestCreatedEvent: `${ORIGINAL_PACKAGE_ID}::escrow::FillRequestCreated`,
   },
 
   pyth: {

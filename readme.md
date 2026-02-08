@@ -82,6 +82,7 @@ This breaks the promise of DeFi.
 | Liquidator             | Executes liquidations (via Adjudicator authorization)                |
 | Oracle Provider (Pyth) | Provides secure price feeds                                         |
 | DeepBook               | On-chain matching & execution                                       |
+| **Escrow contract**    | Locks lender funds for async fill; borrower completes or lender reclaims after expiry        |
 | **Custody contract**   | Holds collateral (and optional escrow); releases only on rules or Adjudicator authorization |
 | **Adjudicator contract** | Authorizes releases (repayment, liquidation, disputes) from evidence; does not hold funds |
 | Protocol Contracts     | Enforce rules (RiskEngine, LendingMarketplace, etc.)                  |
@@ -129,7 +130,7 @@ No admin keys. No trusted relayers.
 
 # 6️⃣ CONTRACTS (VERY IMPORTANT)
 
-You will have **9 core contracts/modules**.
+You will have **10 core contracts/modules**.
 
 ---
 
@@ -398,6 +399,47 @@ Fully on-chain liquidation. Does **not** move collateral directly; it requests *
 
 ---
 
+## 10. `Escrow` (escrow-based fill)
+
+### Purpose
+
+Provides an alternative fill path where the **lender locks funds first** and the **borrower completes the fill later**. This removes the need for off-chain coordination between lender and borrower.
+
+### Why needed
+
+The standard fill flow (`marketplace::fill_order`) requires the borrower to sign the transaction with their vault in real time. This means both parties must coordinate off-chain. The escrow flow decouples them: the lender commits funds on their own schedule, and the borrower completes when ready.
+
+### Workflow
+
+1. **Lender commits:** Calls `lender_commit_fill` with a borrow order, their lend order, and the fill amount. The function validates order compatibility (rate, remaining capacity), splits the fill amount from the lender's coin, and creates a shared `FillRequest` object with the locked funds and an expiry timestamp.
+2. **Borrower completes:** Calls `borrower_complete_fill` before expiry. The function drains the escrow balance, delegates to `marketplace::execute_fill` (which creates a `LoanPosition`, transfers principal to borrower, updates vault debt), and marks the request as COMPLETED.
+3. **Lender cancels (if expired):** If the borrower does not complete before expiry, the lender calls `lender_cancel_fill` to reclaim the locked funds. The request is marked CANCELLED.
+
+### Key State
+
+```move
+struct FillRequest has key, store {
+    id: UID,
+    borrow_order_id: ID,
+    lend_order_id: ID,
+    fill_amount: u64,
+    lender: address,
+    borrower: address,
+    vault_id: ID,
+    expiry_ms: u64,
+    locked_balance: Balance<SUI>,
+    status: u8,    // 0=PENDING, 1=COMPLETED, 2=CANCELLED
+}
+```
+
+### Interacts with
+
+* LendingMarketplace (reads orders for validation, calls `execute_fill` on completion)
+* UserVault (borrower's vault passed to `execute_fill`)
+* Pyth Oracle (price check during `execute_fill`)
+
+---
+
 # 7️⃣ COMPLETE WORKFLOWS
 
 ---
@@ -431,6 +473,22 @@ Fully on-chain liquidation. Does **not** move collateral directly; it requests *
 
 ---
 
+## 🟡 Escrow Fill Flow
+
+Rain supports two fill paths:
+
+* **Direct Fill (Order Book):** The borrower signs the fill transaction with their vault in one step. Both parties must be present.
+* **Escrow Fill:** The lender locks funds first; the borrower completes when ready. No off-chain coordination.
+
+### Escrow steps
+
+1. Lender calls `lender_commit_fill` — funds locked in a shared `FillRequest` with an expiry
+2. Borrower sees the pending request and calls `borrower_complete_fill` before expiry
+3. Escrow drains into `marketplace::execute_fill` — `LoanPosition` created, principal transferred, vault debt updated
+4. If borrower does not complete before expiry, lender calls `lender_cancel_fill` to reclaim funds
+
+---
+
 ## ⚠️ Liquidation Flow (IMPORTANT)
 
 1. Oracle price updates
@@ -459,6 +517,7 @@ Fully on-chain liquidation. Does **not** move collateral directly; it requests *
 
 ✅ DeepBook as core infra (mainnet)
 ✅ Partial fills for borrow/lend orders
+✅ Escrow fill flow (async lender-first fills via shared objects)
 ✅ Parallel execution
 ✅ Object-based vaults
 ✅ No relayers
@@ -466,5 +525,19 @@ Fully on-chain liquidation. Does **not** move collateral directly; it requests *
 
 This is **not portable** to Ethereum easily.
 
+---
+
+# 🔟 DEPLOYED CONTRACT
+
+**Network:** Sui Testnet
+
+| Key | Value |
+|-----|-------|
+| Original Package ID | `0x46866743cab6b7174895be4848c598db76101dddef61962223971b853a3f0701` |
+| Latest Package ID | `0x40303a5f8f5e84d5769523dad6c5ca8334974112026eb3374572d8e25d8af01b` |
+| LendingMarketplace (shared) | `0x0dfb245d338b3568c00e45e313d412685b5159251d5ed1dea6ca708c8f93fc28` |
+| UpgradeCap | `0xa0302a33ae12a8aa1a40ba76ff429fc49c4df0b58bd4f0a73f8681a4e96aef2d` |
+
+> **Note on upgrades:** After a Sui package upgrade, struct types on objects always reference the **original** package ID, while function call targets must use the **latest** package ID. The frontend uses `NEXT_PUBLIC_RAIN_PACKAGE_ID` (latest) for transaction calls and `NEXT_PUBLIC_RAIN_ORIGINAL_PACKAGE_ID` (original) for type queries.
 
 

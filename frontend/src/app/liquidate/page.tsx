@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import {
   useLiquidate,
   useSellCollateralAndSettle,
 } from "@/hooks/useRainTransactions";
-import { useSuiClient } from "@mysten/dapp-kit";
+import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import { RAIN } from "@/lib/rain";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ export default function LiquidatePage() {
   const { liquidate, isPending } = useLiquidate();
   const { sellAndSettle, isPending: settling } = useSellCollateralAndSettle();
   const client = useSuiClient();
+  const account = useCurrentAccount();
 
   // Step 1: Liquidate fields
   const [userVaultId, setUserVaultId] = useState("");
@@ -51,6 +52,7 @@ export default function LiquidatePage() {
     [],
   );
   const [discovering, setDiscovering] = useState(false);
+  const autoRanForRef = useRef<string>("");
 
   const handleLiquidate = async () => {
     if (!userVaultId || !custodyVaultId) {
@@ -106,8 +108,7 @@ export default function LiquidatePage() {
   };
 
   // --- Liquidatable vault discovery ---
-  const discoverVaults = useCallback(async () => {
-    const addr = searchAddress.trim();
+  const discoverVaults = useCallback(async (addr: string) => {
     if (!addr) {
       toast.error("Enter an address to search.");
       return;
@@ -164,7 +165,17 @@ export default function LiquidatePage() {
     } finally {
       setDiscovering(false);
     }
-  }, [client, searchAddress]);
+  }, [client]);
+
+  // Auto-discover vaults for connected wallet on mount / account change
+  useEffect(() => {
+    const addr = account?.address;
+    if (addr && addr !== autoRanForRef.current) {
+      autoRanForRef.current = addr;
+      setSearchAddress(addr);
+      discoverVaults(addr);
+    }
+  }, [account?.address, discoverVaults]);
 
   return (
     <Layout activePage="liquidate">
@@ -195,7 +206,7 @@ export default function LiquidatePage() {
               <button
                 type="button"
                 className="pixel-btn pixel-btn-accent"
-                onClick={discoverVaults}
+                onClick={() => discoverVaults(searchAddress.trim())}
                 disabled={discovering}
               >
                 {discovering ? "..." : "Search"}
