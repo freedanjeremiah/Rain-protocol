@@ -6,7 +6,11 @@
       "Bash(sui:*)",
       "Bash(ls \"C:\\\\Users\\\\freed\\\\.move\\\\git\\\\https___github_com_MystenLabs_deepbookv3_git_22c784b87f811fb29697a73bf585e3f516a1f766\\\\packages\\\\deepbook\"\" 2>/dev/null; echo \"---\"; ls \"C:Usersfreed.movegithttps___github_com_MystenLabs_deepbookv3_git_22c784b87f811fb29697a73bf585e3f516a1f766packagestoken\"\")",
       "Bash(python3:*)",
-      "Bash(npx next build)"
+      "Bash(npx next build)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm show:*)"
     ]
   }
 }

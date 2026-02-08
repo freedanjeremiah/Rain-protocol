@@ -5,6 +5,14 @@
 const PACKAGE_ID = process.env.NEXT_PUBLIC_RAIN_PACKAGE_ID ?? "0x0";
 const MARKETPLACE_ID =
   process.env.NEXT_PUBLIC_LENDING_MARKETPLACE_ID ?? "0x0";
+const DEEPBOOK_SUI_USDC_POOL =
+  process.env.NEXT_PUBLIC_DEEPBOOK_SUI_USDC_POOL_ID ?? "";
+const DEEP_COIN_TYPE =
+  process.env.NEXT_PUBLIC_DEEP_COIN_TYPE ??
+  "0x36dbef866a1d62bf7328989a10fb2f07d769f4ee587c0de4a0a256e57e0a58a8::deep::DEEP";
+const DBUSDC_COIN_TYPE =
+  process.env.NEXT_PUBLIC_DBUSDC_COIN_TYPE ??
+  "0xf7152c05930480cd740d7311b5b8b45c6f488e3a53a11c3f74a6fac36a52e0d7::DBUSDC::DBUSDC";
 
 export const RAIN = {
   packageId: PACKAGE_ID,
@@ -44,6 +52,12 @@ export const RAIN = {
   liquidation: {
     liquidate: `${PACKAGE_ID}::liquidation::liquidate`,
     sellCollateralAndSettle: `${PACKAGE_ID}::liquidation::sell_collateral_and_settle`,
+  },
+
+  deepbook: {
+    suiUsdcPoolId: DEEPBOOK_SUI_USDC_POOL,
+    deepCoinType: DEEP_COIN_TYPE,
+    dbUsdcCoinType: DBUSDC_COIN_TYPE,
   },
 } as const;
 

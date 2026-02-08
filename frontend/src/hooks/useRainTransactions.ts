@@ -318,6 +318,79 @@ export function useReleaseToOwner() {
 /*  Liquidation: liquidate an under-collateralised vault              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Step 2 of liquidation: sell collateral on DeepBook and settle.
+ * Call after liquidate() returns the collateral Coin<SUI> to the liquidator.
+ *
+ * The liquidator passes:
+ *   - userVaultId: the target borrower's UserVault (to reduce debt)
+ *   - collateralCoinId: the Coin<SUI> received from step 1
+ *   - deepCoinId: a Coin<DEEP> for DeepBook taker fees
+ *   - minQuoteOut: minimum DBUSDC to receive from the swap
+ *   - liquidatorBonusBps: bonus for the liquidator (e.g. 500 = 5%)
+ */
+export function useSellCollateralAndSettle() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const sellAndSettle = useCallback(
+    async (
+      userVaultId: string,
+      collateralCoinId: string,
+      deepCoinId: string,
+      minQuoteOut: string = "0",
+      liquidatorBonusBps: number = 500,
+    ) => {
+      const tx = new Transaction();
+
+      tx.moveCall({
+        target: RAIN.liquidation.sellCollateralAndSettle,
+        typeArguments: [
+          "0x2::sui::SUI",
+          RAIN.deepbook.dbUsdcCoinType,
+        ],
+        arguments: [
+          tx.object(userVaultId),
+          tx.object(RAIN.deepbook.suiUsdcPoolId),
+          tx.object(collateralCoinId),
+          tx.object(deepCoinId),
+          tx.pure.u64(minQuoteOut),
+          tx.pure.u64(liquidatorBonusBps),
+          tx.object(SUI_CLOCK),
+        ],
+      });
+
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { sellAndSettle, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Transfer a LoanPosition (lender → borrower for repayment)         */
+/* ------------------------------------------------------------------ */
+
+export function useTransferPosition() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const transferPosition = useCallback(
+    async (loanPositionId: string, recipientAddress: string) => {
+      const tx = new Transaction();
+      tx.transferObjects(
+        [tx.object(loanPositionId)],
+        tx.pure.address(recipientAddress),
+      );
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { transferPosition, isPending };
+}
+
 export function useLiquidate() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
