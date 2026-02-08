@@ -212,13 +212,11 @@ export function useRepayPosition() {
 /*  Marketplace: fill order (match borrow + lend)                     */
 /* ------------------------------------------------------------------ */
 
-/** SUI/USD feed ID with 0x for Pyth SDK */
-const SUI_USD_FEED_ID_HEX = `0x${RAIN.pyth.suiUsdFeedId}`;
-
 /**
- * Fills a borrow order with a lend order using Pyth pull oracle: updates the
- * SUI/USD price in the same transaction, then calls fill_order. No env
- * price object ID needed (testnet).
+ * Fills a borrow order with a lend order.
+ * Uses the Pyth pull-oracle SDK to update the SUI/USD price in the same
+ * transaction, then calls fill_order.  fill_order takes &mut Coin<T> so
+ * we pass the gas coin directly — it splits fill_amount internally.
  */
 export function useFillOrder() {
   const client = useSuiClient();
@@ -234,37 +232,31 @@ export function useFillOrder() {
       maxAgeSecs: number = 60,
     ) => {
       const tx = new Transaction();
-      const { testnet } = RAIN.pyth as {
-        hermesUrl: string;
-        pythStateId: string;
-        wormholeStateId: string;
-      };
 
-      const connection = new SuiPriceServiceConnection(testnet.hermesUrl);
-      const priceIds = [SUI_USD_FEED_ID_HEX];
-      const rawUpdates = await connection.getPriceFeedsUpdateData(priceIds);
-      // SDK expects Node Buffer (readUint8/readUint16BE); Hermes may return Uint8Array in browser
-      const updates = rawUpdates.map((u) => Buffer.from(u));
-      const pythClient = new SuiPythClient(
-        client,
-        testnet.pythStateId,
-        testnet.wormholeStateId,
+      // Update Pyth SUI/USD price in the same PTB (pull oracle)
+      const feedIdHex = `0x${RAIN.pyth.suiUsdFeedId}`;
+      const connection = new SuiPriceServiceConnection(
+        RAIN.pyth.testnet.hermesUrl,
       );
+      const rawUpdates = await connection.getPriceFeedsUpdateData([feedIdHex]);
+      const updates = rawUpdates.map((u) => Buffer.from(u));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch between dapp-kit and pyth-sui-js
+      const pythClient = new SuiPythClient(
+        client as any,
+        RAIN.pyth.testnet.pythStateId,
+        RAIN.pyth.testnet.wormholeStateId,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch
       const priceInfoObjectIds = await pythClient.updatePriceFeeds(
-        tx,
+        tx as any,
         updates,
-        priceIds,
+        [feedIdHex],
       );
       const priceInfoObjectId = priceInfoObjectIds[0];
       if (!priceInfoObjectId) {
-        throw new Error("Pyth did not return a price object for SUI/USD");
+        throw new Error("Pyth did not return a PriceInfoObject for SUI/USD");
       }
 
-      // Split into two coins so both results are used (avoids UnusedValueWithoutDrop: result_idx 5)
-      const [coinForFill, coinRest] = tx.splitCoins(tx.gas, [
-        tx.pure.u64(fillAmount),
-        tx.pure.u64(1),
-      ]);
       const feedBytes = Array.from(
         Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
@@ -277,7 +269,7 @@ export function useFillOrder() {
           tx.pure.id(borrowOrderId),
           tx.pure.id(lendOrderId),
           tx.pure.u64(fillAmount),
-          coinForFill,
+          tx.gas,
           tx.object(borrowerVaultId),
           tx.pure.vector("u8", feedBytes),
           tx.object(priceInfoObjectId),
@@ -285,7 +277,6 @@ export function useFillOrder() {
           tx.pure.u64(maxAgeSecs),
         ],
       });
-      tx.mergeCoins(tx.gas, [coinRest]);
 
       return signAndExecute({ transaction: tx });
     },
@@ -422,31 +413,48 @@ export function useTransferPosition() {
 }
 
 export function useLiquidate() {
+  const client = useSuiClient();
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
 
   /**
    * Liquidates a vault whose LTV exceeds the threshold.
-   * Requires Pyth price feed objects.
-   *
-   *   - userVaultId + custodyVaultId: the target vault
-   *   - priceFeedId: Pyth price feed ID bytes (hex string without 0x)
-   *   - priceInfoObjectId: the Sui object holding the Pyth price
-   *   - maxAgeSecs: max staleness for the oracle price (e.g. 60)
+   * Updates the Pyth SUI/USD price in the same transaction (pull oracle).
    */
   const liquidate = useCallback(
     async (
       userVaultId: string,
       custodyVaultId: string,
-      priceFeedId: string,
-      priceInfoObjectId: string,
       maxAgeSecs: number = 60,
     ) => {
       const tx = new Transaction();
 
-      // Convert hex price feed id to bytes
+      // Update Pyth SUI/USD price in the same PTB
+      const feedIdHex = `0x${RAIN.pyth.suiUsdFeedId}`;
+      const connection = new SuiPriceServiceConnection(
+        RAIN.pyth.testnet.hermesUrl,
+      );
+      const rawUpdates = await connection.getPriceFeedsUpdateData([feedIdHex]);
+      const updates = rawUpdates.map((u) => Buffer.from(u));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch between dapp-kit and pyth-sui-js
+      const pythClient = new SuiPythClient(
+        client as any,
+        RAIN.pyth.testnet.pythStateId,
+        RAIN.pyth.testnet.wormholeStateId,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch
+      const priceInfoObjectIds = await pythClient.updatePriceFeeds(
+        tx as any,
+        updates,
+        [feedIdHex],
+      );
+      const priceInfoObjectId = priceInfoObjectIds[0];
+      if (!priceInfoObjectId) {
+        throw new Error("Pyth did not return a PriceInfoObject for SUI/USD");
+      }
+
       const feedBytes = Array.from(
-        Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
+        Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
 
       tx.moveCall({
@@ -463,7 +471,7 @@ export function useLiquidate() {
 
       return signAndExecute({ transaction: tx });
     },
-    [signAndExecute],
+    [client, signAndExecute],
   );
 
   return { liquidate, isPending };
