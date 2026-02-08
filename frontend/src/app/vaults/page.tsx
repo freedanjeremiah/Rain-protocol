@@ -6,6 +6,7 @@ import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import { useOwnedVaults } from "@/hooks/useOwnedVaults";
 import { useCreateVault } from "@/hooks/useRainTransactions";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { toast } from "sonner";
 
 function truncate(id: string) {
@@ -48,6 +49,7 @@ export default function VaultsPage() {
     <Layout activePage="vaults">
       <WalletGate>
         <div className="mx-auto max-w-2xl px-6 py-10">
+          <BorrowerStepper currentStep={1} />
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Vaults
           </h1>

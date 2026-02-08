@@ -13,6 +13,7 @@ import {
   useRepayPosition,
   useTransferPosition,
 } from "@/hooks/useRainTransactions";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { toast } from "sonner";
 
 const MIST_PER_SUI = 1_000_000_000;
@@ -105,14 +106,23 @@ export default function RepayPage() {
     <Layout activePage="repay">
       <WalletGate>
         <div className="mx-auto max-w-xl px-6 py-10">
+          <BorrowerStepper currentStep={5} />
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Repay
           </h1>
-          <p className="mb-6 text-xs text-[var(--fg-dim)]">
-            Repay principal to clear vault debt. The lender holds the
-            LoanPosition after a fill; they must transfer it to the borrower
-            first.
-          </p>
+
+          {/* How repayment works */}
+          <div className="pixel-border mb-6 bg-[var(--accent)]/5 p-4 text-xs leading-relaxed text-[var(--fg-dim)]">
+            <p className="mb-2 font-medium uppercase text-[var(--fg)]">
+              How repayment works
+            </p>
+            <ol className="list-inside list-decimal space-y-1">
+              <li>After a fill, the lender holds the LoanPosition</li>
+              <li>The lender must transfer it to you (the borrower) using the &quot;Positions I Hold&quot; tab</li>
+              <li>Once you own the LoanPosition, select it and repay principal + interest</li>
+              <li>After repayment, your vault debt is cleared &mdash; you can then withdraw collateral</li>
+            </ol>
+          </div>
 
           {/* Tabs */}
           <div className="mb-6 flex gap-2">

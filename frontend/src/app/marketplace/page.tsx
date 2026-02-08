@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
@@ -169,10 +170,25 @@ export default function MarketplacePage() {
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Order Book
           </h1>
-          <p className="mb-6 text-xs text-[var(--fg-dim)]">
+          <p className="mb-4 text-xs text-[var(--fg-dim)]">
             View open borrow and lend orders. Fill orders to create loan
             positions.
           </p>
+
+          {/* Fill path banner */}
+          <div className="pixel-border mb-6 bg-[var(--accent)]/5 p-4 text-xs leading-relaxed text-[var(--fg-dim)]">
+            <p className="mb-1">
+              <span className="font-medium text-[var(--fg)]">Direct Fill:</span>{" "}
+              The borrower signs the fill transaction with their vault. They must already hold the loan amount.
+            </p>
+            <p>
+              Need the lender to go first?{" "}
+              <Link href="/escrow" className="text-[var(--accent)]">
+                Escrow Fill &rarr;
+              </Link>{" "}
+              the lender locks funds, and the borrower completes when ready.
+            </p>
+          </div>
 
           {/* Tabs */}
           <div className="mb-6 flex gap-2">
@@ -193,7 +209,7 @@ export default function MarketplacePage() {
             <button
               type="button"
               className="pixel-btn ml-auto"
-              onClick={refetch}
+              onClick={() => refetch()}
               disabled={isPending}
             >
               {isPending ? "Loading..." : "Refresh"}

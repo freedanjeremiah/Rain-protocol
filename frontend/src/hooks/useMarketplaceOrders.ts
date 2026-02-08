@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import { useSuiClient } from "@mysten/dapp-kit";
+import { useQuery } from "@tanstack/react-query";
 import { RAIN, isMarketplaceConfigured } from "@/lib/rain";
+import { QUERY_KEYS } from "./useRainMutation";
 
 export interface MarketBorrowOrder {
   objectId: string;
@@ -68,71 +69,15 @@ function parseLendFields(objectId: string, content: unknown): MarketLendOrder | 
   };
 }
 
-/**
- * Query the LendingMarketplace shared object for open borrow and lend orders.
- * Sui Tables store entries as dynamic fields on the Table's internal UID.
- * We first read the marketplace object to get the table IDs, then query dynamic fields on each.
- */
-export function useMarketplaceOrders() {
-  const client = useSuiClient();
-  const [borrowOrders, setBorrowOrders] = useState<MarketBorrowOrder[]>([]);
-  const [lendOrders, setLendOrders] = useState<MarketLendOrder[]>([]);
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchOrders = useCallback(async () => {
-    if (!isMarketplaceConfigured()) return;
-    setIsPending(true);
-    setError(null);
-    try {
-      // 1. Get marketplace object to find table UIDs
-      const mpObj = await client.getObject({
-        id: RAIN.marketplaceId,
-        options: { showContent: true },
-      });
-      const mpContent = mpObj.data?.content;
-      if (!mpContent || mpContent.dataType !== "moveObject") {
-        setError("Cannot read marketplace object");
-        return;
-      }
-      const mpFields = mpContent.fields as Record<string, unknown>;
-      // Table fields have { type: "...", fields: { id: { id: "0x..." }, size: "..." } }
-      const borrowTableId = parseTableId(mpFields.borrow_orders);
-      const lendTableId = parseTableId(mpFields.lend_orders);
-
-      // 2. Query dynamic fields on each table
-      const [bOrders, lOrders] = await Promise.all([
-        borrowTableId ? fetchTableEntries(client, borrowTableId, "borrow") : Promise.resolve([]),
-        lendTableId ? fetchTableEntries(client, lendTableId, "lend") : Promise.resolve([]),
-      ]);
-
-      setBorrowOrders(bOrders as MarketBorrowOrder[]);
-      setLendOrders(lOrders as MarketLendOrder[]);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsPending(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
-
-  return { borrowOrders, lendOrders, isPending, error, refetch: fetchOrders };
-}
-
 function parseTableId(tableField: unknown): string | null {
   if (!tableField || typeof tableField !== "object") return null;
   const f = tableField as Record<string, unknown>;
-  // Table field in Sui: { fields: { id: { id: "0x..." }, size: "..." } }
   const fields = f.fields as Record<string, unknown> | undefined;
   if (fields) {
     const idObj = fields.id as Record<string, unknown> | undefined;
     if (idObj && typeof idObj === "object" && "id" in idObj) return String(idObj.id);
     if (typeof fields.id === "string") return fields.id;
   }
-  // direct: { id: { id: "0x..." } }
   const idObj = f.id as Record<string, unknown> | undefined;
   if (idObj && typeof idObj === "object" && "id" in idObj) return String(idObj.id);
   if (typeof f.id === "string") return f.id;
@@ -159,7 +104,6 @@ async function fetchTableEntries(
 
     if (page.data.length === 0) break;
 
-    // Fetch each dynamic field object in parallel
     const entries = await Promise.all(
       page.data.map(async (df) => {
         try {
@@ -169,11 +113,9 @@ async function fetchTableEntries(
           });
           const content = obj.data?.content;
           if (!content || content.dataType !== "moveObject") return null;
-          // Dynamic field wraps the value: fields.value contains the order
           const dfFields = content.fields as Record<string, unknown>;
           const value = dfFields.value as Record<string, unknown> | undefined;
           const orderFields = value?.fields ?? value;
-          // The order's object ID is in the dynamic field name (the key)
           const orderId = typeof df.name.value === "string" ? df.name.value : df.objectId;
           if (kind === "borrow") {
             return parseBorrowFields(orderId, orderFields ? { fields: orderFields } : null);
@@ -195,4 +137,48 @@ async function fetchTableEntries(
   }
 
   return results;
+}
+
+/**
+ * Query the LendingMarketplace shared object for open borrow and lend orders.
+ * Uses TanStack Query for automatic cache management and invalidation.
+ */
+export function useMarketplaceOrders() {
+  const client = useSuiClient();
+
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: [...QUERY_KEYS.marketplaceOrders],
+    queryFn: async () => {
+      const mpObj = await client.getObject({
+        id: RAIN.marketplaceId,
+        options: { showContent: true },
+      });
+      const mpContent = mpObj.data?.content;
+      if (!mpContent || mpContent.dataType !== "moveObject") {
+        throw new Error("Cannot read marketplace object");
+      }
+      const mpFields = mpContent.fields as Record<string, unknown>;
+      const borrowTableId = parseTableId(mpFields.borrow_orders);
+      const lendTableId = parseTableId(mpFields.lend_orders);
+
+      const [bOrders, lOrders] = await Promise.all([
+        borrowTableId ? fetchTableEntries(client, borrowTableId, "borrow") : Promise.resolve([]),
+        lendTableId ? fetchTableEntries(client, lendTableId, "lend") : Promise.resolve([]),
+      ]);
+
+      return {
+        borrowOrders: bOrders as MarketBorrowOrder[],
+        lendOrders: lOrders as MarketLendOrder[],
+      };
+    },
+    enabled: isMarketplaceConfigured(),
+  });
+
+  return {
+    borrowOrders: data?.borrowOrders ?? [],
+    lendOrders: data?.lendOrders ?? [],
+    isPending,
+    error: error ? (error instanceof Error ? error.message : String(error)) : null,
+    refetch,
+  };
 }

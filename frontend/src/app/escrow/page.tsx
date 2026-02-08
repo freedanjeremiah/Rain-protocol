@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/hooks/useActiveFillRequests";
 import { useMarketplaceOrders } from "@/hooks/useMarketplaceOrders";
 import { useCurrentAccount } from "@mysten/dapp-kit";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { toast } from "sonner";
 
 type Tab = "commit" | "complete" | "requests";
@@ -37,9 +39,24 @@ export default function EscrowPage() {
     <Layout activePage="escrow">
       <WalletGate>
         <div className="mx-auto max-w-xl px-6 py-10">
-          <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
+          <h1 className="mb-4 text-2xl uppercase tracking-wider sm:text-3xl">
             Escrow Fill
           </h1>
+
+          {/* Info banner */}
+          <div className="pixel-border mb-6 bg-[var(--accent)]/5 p-4 text-xs leading-relaxed text-[var(--fg-dim)]">
+            <p className="mb-1">
+              <span className="font-medium text-[var(--fg)]">Escrow Fill:</span>{" "}
+              The lender locks funds on-chain. The borrower completes the fill when ready &mdash; no off-chain coordination needed.
+            </p>
+            <p>
+              Want a direct fill instead? In the{" "}
+              <Link href="/marketplace" className="text-[var(--accent)]">
+                Order Book &rarr;
+              </Link>{" "}
+              the borrower signs with their vault in one step.
+            </p>
+          </div>
 
           {/* Tab selector */}
           <div className="mb-6 flex gap-2">
@@ -58,6 +75,8 @@ export default function EscrowPage() {
               </button>
             ))}
           </div>
+
+          {tab === "complete" && <BorrowerStepper currentStep={4} />}
 
           {tab === "commit" && <CommitTab />}
           {tab === "complete" && (
@@ -203,7 +222,7 @@ function CommitTab() {
         <button
           type="button"
           className="pixel-btn"
-          onClick={refetch}
+          onClick={() => refetch()}
           disabled={loadingOrders}
         >
           Refresh Orders
@@ -295,7 +314,7 @@ function CompleteTab({ userAddress }: { userAddress: string }) {
       <button
         type="button"
         className="pixel-btn"
-        onClick={refetch}
+        onClick={() => refetch()}
         disabled={loadingReqs}
       >
         Refresh
@@ -405,7 +424,7 @@ function RequestsTab({ userAddress }: { userAddress: string }) {
       <button
         type="button"
         className="pixel-btn"
-        onClick={refetch}
+        onClick={() => refetch()}
         disabled={loadingReqs}
       >
         Refresh

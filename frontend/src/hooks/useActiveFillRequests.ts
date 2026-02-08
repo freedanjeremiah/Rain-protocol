@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
+import { useQuery } from "@tanstack/react-query";
 import { RAIN, isRainConfigured } from "@/lib/rain";
+import { QUERY_KEYS } from "./useRainMutation";
 
 export interface FillRequestData {
   objectId: string;
@@ -26,21 +27,18 @@ function parseId(val: unknown): string {
 
 /**
  * Discovers FillRequest objects relevant to the current user via events.
- * Queries FillRequestCreated events, filters by user (lender or borrower),
- * fetches each object and parses its current state.
+ * Uses TanStack Query for automatic cache management and invalidation.
  */
 export function useActiveFillRequests() {
   const client = useSuiClient();
   const account = useCurrentAccount();
-  const [requests, setRequests] = useState<FillRequestData[]>([]);
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const address = account?.address;
 
-  const fetchRequests = useCallback(async () => {
-    if (!isRainConfigured() || !account?.address) return;
-    setIsPending(true);
-    setError(null);
-    try {
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: [...QUERY_KEYS.fillRequests, address],
+    queryFn: async () => {
+      if (!address) return [];
+
       // Query FillRequestCreated events
       const eventsResp = await client.queryEvents({
         query: { MoveEventType: RAIN.escrow.fillRequestCreatedEvent },
@@ -55,16 +53,13 @@ export function useActiveFillRequests() {
         if (!parsed) continue;
         const lender = String(parsed.lender ?? "");
         const borrower = String(parsed.borrower ?? "");
-        if (lender === account.address || borrower === account.address) {
+        if (lender === address || borrower === address) {
           const frid = String(parsed.fill_request_id ?? "");
           if (frid) relevantIds.add(frid);
         }
       }
 
-      if (relevantIds.size === 0) {
-        setRequests([]);
-        return;
-      }
+      if (relevantIds.size === 0) return [];
 
       // Fetch each object
       const objectIds = Array.from(relevantIds);
@@ -102,17 +97,15 @@ export function useActiveFillRequests() {
         });
       }
 
-      setRequests(result);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsPending(false);
-    }
-  }, [client, account?.address]);
+      return result;
+    },
+    enabled: isRainConfigured() && !!address,
+  });
 
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
-
-  return { requests, isPending, error, refetch: fetchRequests };
+  return {
+    requests: data ?? [],
+    isPending,
+    error: error ? (error instanceof Error ? error.message : String(error)) : null,
+    refetch,
+  };
 }

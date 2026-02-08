@@ -9,17 +9,19 @@ import {
   SuiPriceServiceConnection,
 } from "@pythnetwork/pyth-sui-js";
 import { RAIN, SUI_CLOCK } from "@/lib/rain";
+import { useInvalidateAfterTx } from "./useRainMutation";
 
 const DEFAULT_LIQUIDATION_THRESHOLD_BPS = 8000; // 80%
 const DAYS_TO_SECS = 86_400;
 
 /* ------------------------------------------------------------------ */
-/*  Vault helpers (existing)                                          */
+/*  Vault helpers                                                      */
 /* ------------------------------------------------------------------ */
 
 export function useCreateVault() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults"]);
 
   const createVault = useCallback(
     async (
@@ -30,9 +32,11 @@ export function useCreateVault() {
         target: RAIN.userVault.createVault,
         arguments: [tx.pure.u64(liquidationThresholdBps)],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { createVault, isPending };
@@ -41,6 +45,7 @@ export function useCreateVault() {
 export function useDeposit() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults", "ownedCustody"]);
 
   const deposit = useCallback(
     async (
@@ -58,9 +63,11 @@ export function useDeposit() {
           coin,
         ],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { deposit, isPending };
@@ -73,13 +80,8 @@ export function useDeposit() {
 export function useSubmitBorrowOrder() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["marketplaceOrders", "ownedVaults"]);
 
-  /**
-   * Creates a BorrowOrder then submits it to the shared LendingMarketplace.
-   * Two Move calls in one PTB:
-   *   1. marketplace::create_borrow_order  -> BorrowOrder
-   *   2. marketplace::submit_borrow_order(marketplace, vault, order)
-   */
   const submitBorrowOrder = useCallback(
     async (
       userVaultId: string,
@@ -89,7 +91,6 @@ export function useSubmitBorrowOrder() {
     ) => {
       const tx = new Transaction();
 
-      // 1. create the order object
       const order = tx.moveCall({
         target: RAIN.marketplace.createBorrowOrder,
         arguments: [
@@ -100,7 +101,6 @@ export function useSubmitBorrowOrder() {
         ],
       });
 
-      // 2. submit it to the shared marketplace
       tx.moveCall({
         target: RAIN.marketplace.submitBorrowOrder,
         arguments: [
@@ -110,9 +110,11 @@ export function useSubmitBorrowOrder() {
         ],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { submitBorrowOrder, isPending };
@@ -125,10 +127,8 @@ export function useSubmitBorrowOrder() {
 export function useSubmitLendOrder() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["marketplaceOrders"]);
 
-  /**
-   * Creates a LendOrder then submits it to the shared LendingMarketplace.
-   */
   const submitLendOrder = useCallback(
     async (
       amountUsdc: number,
@@ -151,9 +151,11 @@ export function useSubmitLendOrder() {
         arguments: [tx.object(RAIN.marketplaceId), order],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { submitLendOrder, isPending };
@@ -166,16 +168,8 @@ export function useSubmitLendOrder() {
 export function useRepayPosition() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults", "ownedPositions"]);
 
-  /**
-   * Repays a LoanPosition. The coin type T must match the loan's asset.
-   * For SUI-collateralised USDC loans, T is SUI (0x2::sui::SUI).
-   *
-   * The caller passes:
-   *   - userVaultId: the borrower's UserVault
-   *   - loanPositionId: the LoanPosition object (owned by borrower)
-   *   - repayAmountMist: amount of SUI (in MIST) to repay
-   */
   const repayPosition = useCallback(
     async (
       userVaultId: string,
@@ -196,31 +190,24 @@ export function useRepayPosition() {
         ],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { repayPosition, isPending };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Liquidation: liquidate an under-collateralised vault              */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
 /*  Marketplace: fill order (match borrow + lend)                     */
 /* ------------------------------------------------------------------ */
 
-/**
- * Fills a borrow order with a lend order.
- * Uses the env-configured PriceInfoObject (RAIN.pyth.suiUsdPriceObjectId)
- * for the oracle price check.  fill_order takes &mut Coin<T> so we pass
- * the gas coin directly — it splits fill_amount internally.
- */
 export function useFillOrder() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["marketplaceOrders", "ownedVaults", "ownedPositions"]);
 
   const fillOrder = useCallback(
     async (
@@ -259,9 +246,11 @@ export function useFillOrder() {
         ],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { fillOrder, isPending };
@@ -274,6 +263,7 @@ export function useFillOrder() {
 export function useRequestRepaymentAuth() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedAuths"]);
 
   const requestAuth = useCallback(
     async (userVaultId: string) => {
@@ -282,9 +272,11 @@ export function useRequestRepaymentAuth() {
         target: RAIN.userVault.requestRepaymentAuth,
         arguments: [tx.object(userVaultId)],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { requestAuth, isPending };
@@ -297,6 +289,7 @@ export function useRequestRepaymentAuth() {
 export function useReleaseToOwner() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults", "ownedCustody", "ownedAuths"]);
 
   const releaseToOwner = useCallback(
     async (custodyVaultId: string, repaymentAuthId: string) => {
@@ -308,32 +301,24 @@ export function useReleaseToOwner() {
           tx.object(repaymentAuthId),
         ],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { releaseToOwner, isPending };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Liquidation: liquidate an under-collateralised vault              */
+/*  Liquidation: sell collateral on DeepBook and settle                */
 /* ------------------------------------------------------------------ */
 
-/**
- * Step 2 of liquidation: sell collateral on DeepBook and settle.
- * Call after liquidate() returns the collateral Coin<SUI> to the liquidator.
- *
- * The liquidator passes:
- *   - userVaultId: the target borrower's UserVault (to reduce debt)
- *   - collateralCoinId: the Coin<SUI> received from step 1
- *   - deepCoinId: a Coin<DEEP> for DeepBook taker fees
- *   - minQuoteOut: minimum DBUSDC to receive from the swap
- *   - liquidatorBonusBps: bonus for the liquidator (e.g. 500 = 5%)
- */
 export function useSellCollateralAndSettle() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults"]);
 
   const sellAndSettle = useCallback(
     async (
@@ -362,21 +347,24 @@ export function useSellCollateralAndSettle() {
         ],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { sellAndSettle, isPending };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Transfer a LoanPosition (lender → borrower for repayment)         */
+/*  Transfer a LoanPosition (lender -> borrower for repayment)        */
 /* ------------------------------------------------------------------ */
 
 export function useTransferPosition() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedPositions"]);
 
   const transferPosition = useCallback(
     async (loanPositionId: string, recipientAddress: string) => {
@@ -385,27 +373,25 @@ export function useTransferPosition() {
         [tx.object(loanPositionId)],
         tx.pure.address(recipientAddress),
       );
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { transferPosition, isPending };
 }
 
+/* ------------------------------------------------------------------ */
+/*  Liquidation: liquidate an under-collateralised vault              */
+/* ------------------------------------------------------------------ */
+
 export function useLiquidate() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["ownedVaults"]);
 
-  /**
-   * Liquidates a vault whose LTV exceeds the threshold.
-   * Requires Pyth price feed objects.
-   *
-   *   - userVaultId + custodyVaultId: the target vault
-   *   - priceFeedId: Pyth price feed ID bytes (hex string without 0x)
-   *   - priceInfoObjectId: the Sui object holding the Pyth price
-   *   - maxAgeSecs: max staleness for the oracle price (e.g. 60)
-   */
   const liquidate = useCallback(
     async (
       userVaultId: string,
@@ -416,7 +402,6 @@ export function useLiquidate() {
     ) => {
       const tx = new Transaction();
 
-      // Convert hex price feed id to bytes
       const feedBytes = Array.from(
         Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
       );
@@ -433,9 +418,11 @@ export function useLiquidate() {
         ],
       });
 
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { liquidate, isPending };
@@ -448,6 +435,7 @@ export function useLiquidate() {
 export function useLenderCommitFill() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["fillRequests", "marketplaceOrders"]);
 
   const commitFill = useCallback(
     async (
@@ -469,9 +457,11 @@ export function useLenderCommitFill() {
           tx.object(SUI_CLOCK),
         ],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { commitFill, isPending };
@@ -484,6 +474,7 @@ export function useLenderCommitFill() {
 export function useBorrowerCompleteFill() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["fillRequests", "ownedVaults", "ownedPositions"]);
 
   const completeFill = useCallback(
     async (
@@ -515,9 +506,11 @@ export function useBorrowerCompleteFill() {
           tx.pure.u64(maxAgeSecs),
         ],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { completeFill, isPending };
@@ -530,6 +523,7 @@ export function useBorrowerCompleteFill() {
 export function useLenderCancelFill() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
+  const invalidate = useInvalidateAfterTx(["fillRequests"]);
 
   const cancelFill = useCallback(
     async (fillRequestId: string) => {
@@ -541,9 +535,11 @@ export function useLenderCancelFill() {
           tx.object(SUI_CLOCK),
         ],
       });
-      return signAndExecute({ transaction: tx });
+      const result = await signAndExecute({ transaction: tx });
+      invalidate();
+      return result;
     },
-    [signAndExecute],
+    [signAndExecute, invalidate],
   );
 
   return { cancelFill, isPending };

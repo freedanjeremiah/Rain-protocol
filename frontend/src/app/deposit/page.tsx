@@ -7,6 +7,7 @@ import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import { useOwnedVaults } from "@/hooks/useOwnedVaults";
 import { useDeposit } from "@/hooks/useRainTransactions";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { toast } from "sonner";
 
 const MIST_PER_SUI = 1_000_000_000;
@@ -52,6 +53,7 @@ function DepositContent() {
     <Layout activePage="deposit">
       <WalletGate>
         <div className="mx-auto max-w-xl px-6 py-10">
+          <BorrowerStepper currentStep={2} />
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Deposit
           </h1>

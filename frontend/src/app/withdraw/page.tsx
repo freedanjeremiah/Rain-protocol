@@ -10,6 +10,7 @@ import {
   useRequestRepaymentAuth,
   useReleaseToOwner,
 } from "@/hooks/useRainTransactions";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { toast } from "sonner";
 
 export default function WithdrawPage() {
@@ -73,14 +74,22 @@ export default function WithdrawPage() {
     <Layout activePage="withdraw">
       <WalletGate>
         <div className="mx-auto max-w-xl px-6 py-10">
+          <BorrowerStepper currentStep={6} />
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Withdraw Collateral
           </h1>
-          <p className="mb-6 text-xs text-[var(--fg-dim)]">
-            Withdraw collateral from a vault with zero debt. This is a two-step
-            process: first request a repayment authorization, then release the
-            collateral.
-          </p>
+
+          {/* Info box */}
+          <div className="pixel-border mb-6 bg-[var(--accent)]/5 p-4 text-xs leading-relaxed text-[var(--fg-dim)]">
+            <p className="mb-2 font-medium uppercase text-[var(--fg)]">
+              Withdrawal requires zero debt
+            </p>
+            <p className="mb-1">Repay all loans first, then:</p>
+            <ol className="list-inside list-decimal space-y-1">
+              <li>Request authorization (the adjudicator verifies debt == 0)</li>
+              <li>Release collateral back to your wallet</li>
+            </ol>
+          </div>
 
           <div className="space-y-6">
             {/* Step 1: Select vault */}

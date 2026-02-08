@@ -5,6 +5,7 @@ import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import { useOwnedVaults } from "@/hooks/useOwnedVaults";
 import { useSubmitBorrowOrder } from "@/hooks/useRainTransactions";
+import BorrowerStepper from "@/components/shared/BorrowerStepper";
 import { isMarketplaceConfigured } from "@/lib/rain";
 import { toast } from "sonner";
 
@@ -43,6 +44,7 @@ export default function BorrowPage() {
     <Layout activePage="borrow">
       <WalletGate>
         <div className="mx-auto max-w-xl px-6 py-10">
+          <BorrowerStepper currentStep={3} />
           <h1 className="mb-6 text-2xl uppercase tracking-wider sm:text-3xl">
             Borrow
           </h1>

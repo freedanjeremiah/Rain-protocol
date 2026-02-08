@@ -14,6 +14,10 @@ const pressStart2P = Press_Start_2P({
 export const metadata: Metadata = {
   title: "Rain – We fix fake P2P",
   description: "Rate discovery and liquidation execution both use Sui's DeepBook — no CEX dependency, no off-chain keepers. True P2P lending on Sui.",
+  icons: {
+    icon: "/rain-logo.png",
+    apple: "/rain-logo.png",
+  },
 };
 
 export default function RootLayout({

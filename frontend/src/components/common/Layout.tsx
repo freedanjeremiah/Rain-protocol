@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import Header from "./Header";
 
-type ActivePage = "home" | "vaults" | "deposit" | "borrow" | "lend" | "marketplace" | "escrow" | "repay" | "withdraw" | "liquidate";
+type ActivePage = "home" | "dashboard" | "vaults" | "deposit" | "borrow" | "lend" | "marketplace" | "escrow" | "repay" | "withdraw" | "liquidate";
 
 interface LayoutProps {
   children: ReactNode;
