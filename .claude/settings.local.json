@@ -11,7 +11,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
       "Bash(npm show:*)",
-      "WebFetch(domain:docs.pyth.network)"
+      "WebFetch(domain:docs.pyth.network)",
+      "Bash(python -c:*)"
     ]
   }
 }

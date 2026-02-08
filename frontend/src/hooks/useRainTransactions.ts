@@ -214,12 +214,11 @@ export function useRepayPosition() {
 
 /**
  * Fills a borrow order with a lend order.
- * Uses the Pyth pull-oracle SDK to update the SUI/USD price in the same
- * transaction, then calls fill_order.  fill_order takes &mut Coin<T> so
- * we pass the gas coin directly — it splits fill_amount internally.
+ * Uses the env-configured PriceInfoObject (RAIN.pyth.suiUsdPriceObjectId)
+ * for the oracle price check.  fill_order takes &mut Coin<T> so we pass
+ * the gas coin directly — it splits fill_amount internally.
  */
 export function useFillOrder() {
-  const client = useSuiClient();
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
 
@@ -231,32 +230,14 @@ export function useFillOrder() {
       fillAmount: string,
       maxAgeSecs: number = 60,
     ) => {
-      const tx = new Transaction();
-
-      // Update Pyth SUI/USD price in the same PTB (pull oracle)
-      const feedIdHex = `0x${RAIN.pyth.suiUsdFeedId}`;
-      const connection = new SuiPriceServiceConnection(
-        RAIN.pyth.testnet.hermesUrl,
-      );
-      const rawUpdates = await connection.getPriceFeedsUpdateData([feedIdHex]);
-      const updates = rawUpdates.map((u) => Buffer.from(u));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch between dapp-kit and pyth-sui-js
-      const pythClient = new SuiPythClient(
-        client as any,
-        RAIN.pyth.testnet.pythStateId,
-        RAIN.pyth.testnet.wormholeStateId,
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch
-      const priceInfoObjectIds = await pythClient.updatePriceFeeds(
-        tx as any,
-        updates,
-        [feedIdHex],
-      );
-      const priceInfoObjectId = priceInfoObjectIds[0];
-      if (!priceInfoObjectId) {
-        throw new Error("Pyth did not return a PriceInfoObject for SUI/USD");
+      const priceObjectId = RAIN.pyth.suiUsdPriceObjectId;
+      if (!priceObjectId) {
+        throw new Error(
+          "Set NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID in .env",
+        );
       }
 
+      const tx = new Transaction();
       const feedBytes = Array.from(
         Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
@@ -272,7 +253,7 @@ export function useFillOrder() {
           tx.gas,
           tx.object(borrowerVaultId),
           tx.pure.vector("u8", feedBytes),
-          tx.object(priceInfoObjectId),
+          tx.object(priceObjectId),
           tx.object(SUI_CLOCK),
           tx.pure.u64(maxAgeSecs),
         ],
@@ -280,7 +261,7 @@ export function useFillOrder() {
 
       return signAndExecute({ transaction: tx });
     },
-    [client, signAndExecute],
+    [signAndExecute],
   );
 
   return { fillOrder, isPending };
@@ -413,48 +394,31 @@ export function useTransferPosition() {
 }
 
 export function useLiquidate() {
-  const client = useSuiClient();
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
 
   /**
    * Liquidates a vault whose LTV exceeds the threshold.
-   * Updates the Pyth SUI/USD price in the same transaction (pull oracle).
+   * Requires Pyth price feed objects.
+   *
+   *   - userVaultId + custodyVaultId: the target vault
+   *   - priceFeedId: Pyth price feed ID bytes (hex string without 0x)
+   *   - priceInfoObjectId: the Sui object holding the Pyth price
+   *   - maxAgeSecs: max staleness for the oracle price (e.g. 60)
    */
   const liquidate = useCallback(
     async (
       userVaultId: string,
       custodyVaultId: string,
+      priceFeedId: string,
+      priceInfoObjectId: string,
       maxAgeSecs: number = 60,
     ) => {
       const tx = new Transaction();
 
-      // Update Pyth SUI/USD price in the same PTB
-      const feedIdHex = `0x${RAIN.pyth.suiUsdFeedId}`;
-      const connection = new SuiPriceServiceConnection(
-        RAIN.pyth.testnet.hermesUrl,
-      );
-      const rawUpdates = await connection.getPriceFeedsUpdateData([feedIdHex]);
-      const updates = rawUpdates.map((u) => Buffer.from(u));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch between dapp-kit and pyth-sui-js
-      const pythClient = new SuiPythClient(
-        client as any,
-        RAIN.pyth.testnet.pythStateId,
-        RAIN.pyth.testnet.wormholeStateId,
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge @mysten/sui version mismatch
-      const priceInfoObjectIds = await pythClient.updatePriceFeeds(
-        tx as any,
-        updates,
-        [feedIdHex],
-      );
-      const priceInfoObjectId = priceInfoObjectIds[0];
-      if (!priceInfoObjectId) {
-        throw new Error("Pyth did not return a PriceInfoObject for SUI/USD");
-      }
-
+      // Convert hex price feed id to bytes
       const feedBytes = Array.from(
-        Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
+        Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
       );
 
       tx.moveCall({
@@ -471,8 +435,116 @@ export function useLiquidate() {
 
       return signAndExecute({ transaction: tx });
     },
-    [client, signAndExecute],
+    [signAndExecute],
   );
 
   return { liquidate, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Escrow: lender commits funds to fill a borrow order               */
+/* ------------------------------------------------------------------ */
+
+export function useLenderCommitFill() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const commitFill = useCallback(
+    async (
+      borrowOrderId: string,
+      lendOrderId: string,
+      fillAmount: string,
+      expirySecs: number = 300,
+    ) => {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: RAIN.escrow.lenderCommitFill,
+        arguments: [
+          tx.object(RAIN.marketplaceId),
+          tx.pure.id(borrowOrderId),
+          tx.pure.id(lendOrderId),
+          tx.pure.u64(fillAmount),
+          tx.gas,
+          tx.pure.u64(expirySecs),
+          tx.object(SUI_CLOCK),
+        ],
+      });
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { commitFill, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Escrow: borrower completes a fill request                         */
+/* ------------------------------------------------------------------ */
+
+export function useBorrowerCompleteFill() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const completeFill = useCallback(
+    async (
+      fillRequestId: string,
+      borrowerVaultId: string,
+      maxAgeSecs: number = 60,
+    ) => {
+      const priceObjectId = RAIN.pyth.suiUsdPriceObjectId;
+      if (!priceObjectId) {
+        throw new Error(
+          "Set NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID in .env",
+        );
+      }
+
+      const tx = new Transaction();
+      const feedBytes = Array.from(
+        Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
+      );
+
+      tx.moveCall({
+        target: RAIN.escrow.borrowerCompleteFill,
+        arguments: [
+          tx.object(RAIN.marketplaceId),
+          tx.object(fillRequestId),
+          tx.object(borrowerVaultId),
+          tx.pure.vector("u8", feedBytes),
+          tx.object(priceObjectId),
+          tx.object(SUI_CLOCK),
+          tx.pure.u64(maxAgeSecs),
+        ],
+      });
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { completeFill, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Escrow: lender cancels an expired fill request                    */
+/* ------------------------------------------------------------------ */
+
+export function useLenderCancelFill() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const cancelFill = useCallback(
+    async (fillRequestId: string) => {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: RAIN.escrow.lenderCancelFill,
+        arguments: [
+          tx.object(fillRequestId),
+          tx.object(SUI_CLOCK),
+        ],
+      });
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { cancelFill, isPending };
 }

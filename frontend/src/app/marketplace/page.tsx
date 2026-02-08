@@ -476,12 +476,19 @@ export default function MarketplacePage() {
                     />
                   </div>
 
+                  {!RAIN.pyth.suiUsdPriceObjectId && (
+                    <p className="text-xs text-red-400">
+                      Set NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID in .env to
+                      enable Fill.
+                    </p>
+                  )}
+
                   <div className="flex gap-3">
                     <button
                       type="button"
                       className="pixel-btn pixel-btn-accent"
                       onClick={handleFill}
-                      disabled={filling}
+                      disabled={filling || !RAIN.pyth.suiUsdPriceObjectId}
                     >
                       {filling ? "Filling..." : "Confirm Fill"}
                     </button>

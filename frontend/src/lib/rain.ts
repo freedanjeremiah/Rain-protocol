@@ -56,6 +56,14 @@ export const RAIN = {
     sellCollateralAndSettle: `${PACKAGE_ID}::liquidation::sell_collateral_and_settle`,
   },
 
+  escrow: {
+    fillRequestType: `${PACKAGE_ID}::escrow::FillRequest`,
+    lenderCommitFill: `${PACKAGE_ID}::escrow::lender_commit_fill`,
+    borrowerCompleteFill: `${PACKAGE_ID}::escrow::borrower_complete_fill`,
+    lenderCancelFill: `${PACKAGE_ID}::escrow::lender_cancel_fill`,
+    fillRequestCreatedEvent: `${PACKAGE_ID}::escrow::FillRequestCreated`,
+  },
+
   pyth: {
     suiUsdPriceObjectId: PYTH_SUI_USD_PRICE_OBJECT,
     /** SUI/USD feed ID (hex, with 0x for SDK) */

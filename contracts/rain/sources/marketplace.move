@@ -191,6 +191,18 @@ fun init(ctx: &mut TxContext) {
     sui::transfer::share_object(marketplace);
 }
 
+// === Package-only table accessors (used by escrow) ===
+
+/// Read-only access to borrow orders table.
+public(package) fun borrow_orders(mp: &LendingMarketplace): &Table<ID, BorrowOrder> {
+    &mp.borrow_orders
+}
+
+/// Read-only access to lend orders table.
+public(package) fun lend_orders(mp: &LendingMarketplace): &Table<ID, LendOrder> {
+    &mp.lend_orders
+}
+
 // === Public order creation (user-facing) ===
 
 /// Create a borrow order for the given vault. Then call submit_borrow_order to list it.
@@ -258,15 +270,14 @@ public fun submit_lend_order(
 
 // === Fill (match and settle): principal lender→borrower, create LoanPosition, update vault debt ===
 
-/// Execute a partial fill between a borrow and lend order.
-/// Principal is transferred from lender (coin) to borrower (vault owner). LoanPosition is sent to lender.
-/// RiskEngine enforces borrow limit before adding debt. Rate/duration must be compatible.
-public fun fill_order<T>(
+/// Core fill logic. Takes an owned Coin<T> of exactly fill_amount.
+/// Called by fill_order (public) and escrow::borrower_complete_fill (package).
+public(package) fun execute_fill<T>(
     marketplace: &mut LendingMarketplace,
     borrow_order_id: ID,
     lend_order_id: ID,
     fill_amount: u64,
-    lender_coin: &mut Coin<T>,
+    principal_coin: Coin<T>,
     borrower_vault: &mut UserVault,
     collateral_price_feed_id: vector<u8>,
     price_info_object: &PriceInfoObject,
@@ -274,6 +285,7 @@ public fun fill_order<T>(
     max_age_secs: u64,
     ctx: &mut TxContext,
 ) {
+    assert!(value(&principal_coin) == fill_amount, EInsufficientCoin);
     assert!(table::contains(&marketplace.borrow_orders, borrow_order_id), EOrderNotFound);
     assert!(table::contains(&marketplace.lend_orders, lend_order_id), EOrderNotFound);
 
@@ -298,7 +310,6 @@ public fun fill_order<T>(
         );
         assert!(risk_engine::can_add_debt(borrower_vault, fill_amount, &price, &expo), EBorrowLimitExceeded);
 
-        let principal_coin = split(lender_coin, fill_amount, ctx);
         let borrower = user_vault::owner(borrower_vault);
         sui::transfer::public_transfer(principal_coin, borrower);
 
@@ -332,6 +343,37 @@ public fun fill_order<T>(
         let LendOrder { id, .. } = removed_lend;
         sui::object::delete(id);
     };
+}
+
+/// Public fill: splits fill_amount from lender_coin, delegates to execute_fill.
+/// Preserves original signature for backward compatibility.
+public fun fill_order<T>(
+    marketplace: &mut LendingMarketplace,
+    borrow_order_id: ID,
+    lend_order_id: ID,
+    fill_amount: u64,
+    lender_coin: &mut Coin<T>,
+    borrower_vault: &mut UserVault,
+    collateral_price_feed_id: vector<u8>,
+    price_info_object: &PriceInfoObject,
+    clock: &Clock,
+    max_age_secs: u64,
+    ctx: &mut TxContext,
+) {
+    let principal = split(lender_coin, fill_amount, ctx);
+    execute_fill(
+        marketplace,
+        borrow_order_id,
+        lend_order_id,
+        fill_amount,
+        principal,
+        borrower_vault,
+        collateral_price_feed_id,
+        price_info_object,
+        clock,
+        max_age_secs,
+        ctx,
+    );
 }
 
 #[test_only]
@@ -376,6 +418,73 @@ public fun fill_order_for_testing<T>(
         assert!(risk_engine::can_add_debt(borrower_vault, fill_amount, price, expo), EBorrowLimitExceeded);
 
         let principal_coin = split(lender_coin, fill_amount, ctx);
+        let borrower = user_vault::owner(borrower_vault);
+        sui::transfer::public_transfer(principal_coin, borrower);
+
+        let rate_bps = lend_order.min_interest_bps;
+        let term_secs = lend_order.duration_secs;
+        position = create_loan_position(
+            borrow_order.borrower,
+            lend_order.lender,
+            fill_amount,
+            rate_bps,
+            term_secs,
+            borrow_order.vault_id,
+            ctx,
+        );
+
+        borrow_order_add_filled(borrow_order, fill_amount);
+        lend_order_add_filled(lend_order, fill_amount);
+        borrow_fully_filled = borrow_order.filled_amount == borrow_order.amount;
+        lend_fully_filled = lend_order.filled_amount == lend_order.amount;
+        user_vault::add_debt(borrower_vault, fill_amount);
+    };
+
+    if (borrow_fully_filled) {
+        let removed_borrow = table::remove(&mut marketplace.borrow_orders, borrow_order_id);
+        let BorrowOrder { id, .. } = removed_borrow;
+        sui::object::delete(id);
+    };
+    if (lend_fully_filled) {
+        let removed_lend = table::remove(&mut marketplace.lend_orders, lend_order_id);
+        let LendOrder { id, .. } = removed_lend;
+        sui::object::delete(id);
+    };
+    position
+}
+
+#[test_only]
+/// Same as execute_fill but uses explicit price/expo (no oracle). Returns the LoanPosition.
+public fun execute_fill_for_testing<T>(
+    marketplace: &mut LendingMarketplace,
+    borrow_order_id: ID,
+    lend_order_id: ID,
+    fill_amount: u64,
+    principal_coin: Coin<T>,
+    borrower_vault: &mut UserVault,
+    price: &pyth::i64::I64,
+    expo: &pyth::i64::I64,
+    ctx: &mut TxContext,
+): LoanPosition {
+    assert!(value(&principal_coin) == fill_amount, EInsufficientCoin);
+    assert!(table::contains(&marketplace.borrow_orders, borrow_order_id), EOrderNotFound);
+    assert!(table::contains(&marketplace.lend_orders, lend_order_id), EOrderNotFound);
+
+    let position;
+    let borrow_fully_filled;
+    let lend_fully_filled;
+    {
+        let borrow_order = table::borrow_mut(&mut marketplace.borrow_orders, borrow_order_id);
+        let lend_order = table::borrow_mut(&mut marketplace.lend_orders, lend_order_id);
+
+        let borrow_remaining = borrow_order.amount - borrow_order.filled_amount;
+        let lend_remaining = lend_order.amount - lend_order.filled_amount;
+        assert!(fill_amount <= borrow_remaining && fill_amount <= lend_remaining, EFillAmount);
+        assert!(borrow_order.max_interest_bps >= lend_order.min_interest_bps, ERateMismatch);
+        assert!(borrow_order.duration_secs == lend_order.duration_secs, EDurationMismatch);
+        assert!(borrow_order.vault_id == sui::object::id(borrower_vault), EVaultMismatch);
+        assert!(risk_engine::can_add_debt(borrower_vault, fill_amount, price, expo), EBorrowLimitExceeded);
+
         let borrower = user_vault::owner(borrower_vault);
         sui::transfer::public_transfer(principal_coin, borrower);
 

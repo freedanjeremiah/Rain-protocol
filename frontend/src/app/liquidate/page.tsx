@@ -61,6 +61,8 @@ export default function LiquidatePage() {
       await liquidate(
         userVaultId,
         custodyVaultId,
+        RAIN.pyth.suiUsdFeedId,
+        RAIN.pyth.suiUsdPriceObjectId,
         Number(maxAgeSecs),
       );
       toast.success(
