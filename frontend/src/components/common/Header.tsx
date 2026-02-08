@@ -13,7 +13,7 @@ function truncateAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-type ActivePage = "home" | "vaults" | "deposit" | "borrow" | "lend" | "repay" | "liquidate";
+type ActivePage = "home" | "vaults" | "deposit" | "borrow" | "lend" | "marketplace" | "repay" | "withdraw" | "liquidate";
 
 interface HeaderProps {
   activePage?: ActivePage;
@@ -25,7 +25,9 @@ const NAV_LINKS: { href: string; label: string; page: ActivePage }[] = [
   { href: "/deposit", label: "Deposit", page: "deposit" },
   { href: "/borrow", label: "Borrow", page: "borrow" },
   { href: "/lend", label: "Lend", page: "lend" },
+  { href: "/marketplace", label: "Orders", page: "marketplace" },
   { href: "/repay", label: "Repay", page: "repay" },
+  { href: "/withdraw", label: "Withdraw", page: "withdraw" },
   { href: "/liquidate", label: "Liquidate", page: "liquidate" },
 ];
 

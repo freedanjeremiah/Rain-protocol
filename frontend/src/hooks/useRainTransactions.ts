@@ -203,6 +203,121 @@ export function useRepayPosition() {
 /*  Liquidation: liquidate an under-collateralised vault              */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Marketplace: fill order (match borrow + lend)                     */
+/* ------------------------------------------------------------------ */
+
+export function useFillOrder() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  /**
+   * Fills a borrow order with a lend order. The caller (lender) provides
+   * the coin to fund the loan.
+   *
+   *   - borrowOrderId: the BorrowOrder ID in the marketplace
+   *   - lendOrderId: the LendOrder ID in the marketplace
+   *   - borrowerVaultId: the borrower's UserVault object
+   *   - fillAmount: amount to fill (in base units)
+   *   - priceFeedId: Pyth price feed hex string (no 0x prefix)
+   *   - priceInfoObjectId: the Sui object for the Pyth price
+   *   - maxAgeSecs: max oracle staleness
+   */
+  const fillOrder = useCallback(
+    async (
+      borrowOrderId: string,
+      lendOrderId: string,
+      borrowerVaultId: string,
+      fillAmount: string,
+      priceFeedId: string,
+      priceInfoObjectId: string,
+      maxAgeSecs: number = 60,
+    ) => {
+      const tx = new Transaction();
+
+      const coin = tx.splitCoins(tx.gas, [tx.pure.u64(fillAmount)]);
+      const feedBytes = Array.from(
+        Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
+      );
+
+      tx.moveCall({
+        target: RAIN.marketplace.fillOrder,
+        typeArguments: ["0x2::sui::SUI"],
+        arguments: [
+          tx.object(RAIN.marketplaceId),
+          tx.pure.id(borrowOrderId),
+          tx.pure.id(lendOrderId),
+          tx.pure.u64(fillAmount),
+          coin,
+          tx.object(borrowerVaultId),
+          tx.pure.vector("u8", feedBytes),
+          tx.object(priceInfoObjectId),
+          tx.object(SUI_CLOCK),
+          tx.pure.u64(maxAgeSecs),
+        ],
+      });
+
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { fillOrder, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Withdraw: Step 1 - request repayment auth (debt must be 0)        */
+/* ------------------------------------------------------------------ */
+
+export function useRequestRepaymentAuth() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const requestAuth = useCallback(
+    async (userVaultId: string) => {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: RAIN.userVault.requestRepaymentAuth,
+        arguments: [tx.object(userVaultId)],
+      });
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { requestAuth, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Withdraw: Step 2 - release collateral to owner                    */
+/* ------------------------------------------------------------------ */
+
+export function useReleaseToOwner() {
+  const { mutateAsync: signAndExecute, isPending } =
+    useSignAndExecuteTransaction();
+
+  const releaseToOwner = useCallback(
+    async (custodyVaultId: string, repaymentAuthId: string) => {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: RAIN.custody.releaseToOwner,
+        arguments: [
+          tx.object(custodyVaultId),
+          tx.object(repaymentAuthId),
+        ],
+      });
+      return signAndExecute({ transaction: tx });
+    },
+    [signAndExecute],
+  );
+
+  return { releaseToOwner, isPending };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Liquidation: liquidate an under-collateralised vault              */
+/* ------------------------------------------------------------------ */
+
 export function useLiquidate() {
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();

@@ -15,11 +15,17 @@ export const RAIN = {
     type: `${PACKAGE_ID}::user_vault::UserVault`,
     createVault: `${PACKAGE_ID}::user_vault::create_vault`,
     depositCollateral: `${PACKAGE_ID}::user_vault::deposit_collateral`,
+    requestRepaymentAuth: `${PACKAGE_ID}::user_vault::request_repayment_auth`,
   },
 
   custody: {
     type: `${PACKAGE_ID}::custody::CustodyVault`,
     releaseToOwner: `${PACKAGE_ID}::custody::release_to_owner`,
+  },
+
+  adjudicator: {
+    repaymentAuthType: `${PACKAGE_ID}::adjudicator::RepaymentAuth`,
+    authorizeLiquidation: `${PACKAGE_ID}::adjudicator::authorize_liquidation`,
   },
 
   marketplace: {
@@ -33,10 +39,6 @@ export const RAIN = {
     submitLendOrder: `${PACKAGE_ID}::marketplace::submit_lend_order`,
     fillOrder: `${PACKAGE_ID}::marketplace::fill_order`,
     repayPosition: `${PACKAGE_ID}::marketplace::repay_position`,
-  },
-
-  adjudicator: {
-    authorizeLiquidation: `${PACKAGE_ID}::adjudicator::authorize_liquidation`,
   },
 
   liquidation: {
