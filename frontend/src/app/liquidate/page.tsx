@@ -391,18 +391,16 @@ export default function LiquidatePage() {
                             {(Number(v.thresholdBps) / 100).toFixed(0)}%
                           </p>
                         </div>
-                        {v.isLiquidatable && (
-                          <button
-                            type="button"
-                            className="pixel-btn pixel-btn-accent"
-                            onClick={() => handleLiquidateVault(v)}
-                            disabled={isPending || liquidatingVaultId !== null}
-                          >
-                            {isThisLiquidating
-                              ? "Liquidating..."
-                              : "Liquidate"}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className="pixel-btn pixel-btn-accent"
+                          onClick={() => handleLiquidateVault(v)}
+                          disabled={isPending || liquidatingVaultId !== null}
+                        >
+                          {isThisLiquidating
+                            ? "Liquidating..."
+                            : "Liquidate"}
+                        </button>
                       </div>
                       {v.isLiquidatable && (
                         <p className="mt-1 text-red-400">
