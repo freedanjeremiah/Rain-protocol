@@ -245,20 +245,45 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Go-to-market: how Rain / Sui can make money */}
+      {/* Go-to-market */}
       <section className="px-6 pb-16">
-        <h2 className="mb-4 text-center text-xs uppercase tracking-wider text-[var(--fg-dim)] sm:text-sm">
-          Go-to-market
+        <h2 className="mb-2 text-center text-xs uppercase tracking-wider text-[var(--fg-dim)] sm:text-sm">
+          The Playbook
         </h2>
-        <div className="mx-auto max-w-2xl">
-          <ul className="pixel-border list-inside list-disc space-y-2 bg-[var(--panel)] p-5 pl-6 text-[0.6rem] text-[var(--fg-dim)] sm:pl-7 sm:text-[0.7rem]">
-            <li>Protocol fee on borrow/lend flows (basis points) and optional liquidator fee share.</li>
-            <li>Drive DeepBook volume → more fees and activity on Sui; native orderbook as revenue surface.</li>
-            <li>Bootstrap liquidity with time-bound incentives (e.g. lender/borrower rewards) then taper to sustainable fees.</li>
-            <li>Launch with one collateral (e.g. SUI) and one loan asset; expand pairs as TVL and demand grow.</li>
-            <li>Integrate with Sui wallets and DeFi dashboards for distribution; list on Sui ecosystem pages.</li>
-            <li>Target power users and liquidators first; then broaden to retail via simple UX and clear rate display.</li>
-          </ul>
+        <p className="mx-auto mb-6 max-w-xl text-center text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+          Ship lean, capture value at every layer, scale with the chain.
+        </p>
+        <div className="mx-auto grid w-full max-w-3xl gap-4 sm:grid-cols-3">
+          <div className="pixel-border bg-[var(--panel)] p-5">
+            <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--accent)] sm:text-xs">
+              Phase 1 &mdash; Ignite
+            </p>
+            <ul className="list-inside list-disc space-y-1.5 text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+              <li>Launch with SUI collateral &amp; one loan asset</li>
+              <li>Target liquidators &amp; power users first</li>
+              <li>Bootstrap with time-bound lender/borrower incentives</li>
+            </ul>
+          </div>
+          <div className="pixel-border bg-[var(--panel)] p-5">
+            <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--accent)] sm:text-xs">
+              Phase 2 &mdash; Scale
+            </p>
+            <ul className="list-inside list-disc space-y-1.5 text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+              <li>Expand collateral pairs as TVL grows</li>
+              <li>Integrate Sui wallets &amp; DeFi dashboards</li>
+              <li>Drive DeepBook volume &mdash; every fill is on-chain liquidity</li>
+            </ul>
+          </div>
+          <div className="pixel-border bg-[var(--panel)] p-5">
+            <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--accent)] sm:text-xs">
+              Phase 3 &mdash; Sustain
+            </p>
+            <ul className="list-inside list-disc space-y-1.5 text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+              <li>Protocol fee on fills (bps) + liquidator fee share</li>
+              <li>Taper incentives &mdash; fees carry the protocol</li>
+              <li>Broaden to retail with simple UX &amp; clear rate display</li>
+            </ul>
+          </div>
         </div>
       </section>
 

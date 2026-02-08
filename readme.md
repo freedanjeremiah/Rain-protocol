@@ -1,5 +1,5 @@
 
-#💧 Rain
+#💧 Rain 
 
 **Peer-to-peer lending with zero trust assumptions.** No pooled liquidity. No keeper bots. No CEX price feeds. Rain settles every rate, every fill, and every liquidation through DeepBook and Pyth — fully on-chain, fully non-custodial, built on Sui.
 
