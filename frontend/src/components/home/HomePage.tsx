@@ -150,99 +150,67 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Rain vs other Sui lending protocols */}
+      {/* What makes Rain different */}
       <section className="px-6 pb-16">
-        <h2 className="mb-4 text-center text-xs uppercase tracking-wider text-[var(--fg-dim)] sm:text-sm">
-          Rain vs other lending protocols on Sui
+        <h2 className="mb-2 text-center text-xs uppercase tracking-wider text-[var(--fg-dim)] sm:text-sm">
+          Why Rain
         </h2>
-        <p className="mx-auto mb-6 max-w-2xl text-center text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
-          How Rain’s P2P, orderbook-based design differs from pooled money markets.
+        <p className="mx-auto mb-8 max-w-xl text-center text-[0.6rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.7rem]">
+          Every other lending protocol on Sui pools your funds and hopes an algorithm gets the rate right. Rain doesn&apos;t.
         </p>
-        <div className="mx-auto w-full max-w-[128rem] overflow-x-auto px-2">
-          <table className="w-full min-w-[800px] border-collapse pixel-border bg-[var(--panel)] text-left">
-            <thead>
-              <tr className="border-b-2 border-[var(--border)]">
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  Aspect
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--accent)] sm:text-xs">
-                  Rain
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  How Rain benefits Sui
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  Suilend
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  NAVI
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  Scallop
-                </th>
-                <th className="p-3 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
-                  Bucket
-                </th>
-              </tr>
-            </thead>
-            <tbody className="text-[0.6rem] sm:text-[0.7rem]">
-              <tr className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium text-[var(--fg)]">Liquidity model</td>
-                <td className="p-3 text-[var(--accent)]">True P2P, no pools</td>
-                <td className="p-3 text-[var(--fg-dim)]">Adds P2P option; diversifies DeFi, no pool concentration</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pooled (isolated pools)</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pooled, LSD-focused</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pooled money market</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pooled, object-centric</td>
-              </tr>
-              <tr className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium text-[var(--fg)]">Rate discovery</td>
-                <td className="p-3 text-[var(--accent)]">DeepBook orderbook</td>
-                <td className="p-3 text-[var(--fg-dim)]">Drives DeepBook usage; on-chain rate discovery on Sui</td>
-                <td className="p-3 text-[var(--fg-dim)]">Supply/demand in pools</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pool-based rates</td>
-                <td className="p-3 text-[var(--fg-dim)]">Algorithmic / pool-based</td>
-                <td className="p-3 text-[var(--fg-dim)]">Pool-based</td>
-              </tr>
-              <tr className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium text-[var(--fg)]">Custody</td>
-                <td className="p-3 text-[var(--accent)]">User-owned vaults, custody contract</td>
-                <td className="p-3 text-[var(--fg-dim)]">Strengthens self-custody and user control on Sui</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol-controlled pools</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol pools</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol pools</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol pools</td>
-              </tr>
-              <tr className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium text-[var(--fg)]">Liquidations</td>
-                <td className="p-3 text-[var(--accent)]">On-chain via DeepBook</td>
-                <td className="p-3 text-[var(--fg-dim)]">More DeepBook volume; liquidations fully on Sui</td>
-                <td className="p-3 text-[var(--fg-dim)]">Keeper / auction style</td>
-                <td className="p-3 text-[var(--fg-dim)]">Keeper / protocol</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol / keeper</td>
-                <td className="p-3 text-[var(--fg-dim)]">Protocol-based</td>
-              </tr>
-              <tr className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium text-[var(--fg)]">CEX / off-chain</td>
-                <td className="p-3 text-[var(--accent)]">None; no CEX, no keepers</td>
-                <td className="p-3 text-[var(--fg-dim)]">Shows Sui can do full lending stack without CEX or keepers</td>
-                <td className="p-3 text-[var(--fg-dim)]">May use oracles / keepers</td>
-                <td className="p-3 text-[var(--fg-dim)]">Oracle + execution infra</td>
-                <td className="p-3 text-[var(--fg-dim)]">Security-focused, may use keepers</td>
-                <td className="p-3 text-[var(--fg-dim)]">On-chain object model</td>
-              </tr>
-              <tr>
-                <td className="p-3 font-medium text-[var(--fg)]">Focus</td>
-                <td className="p-3 text-[var(--accent)]">Censorship-resistant P2P</td>
-                <td className="p-3 text-[var(--fg-dim)]">Censorship-resistant lending; complements pooled protocols</td>
-                <td className="p-3 text-[var(--fg-dim)]">Lending + liquid staking (SpringSui)</td>
-                <td className="p-3 text-[var(--fg-dim)]">Liquidity + LSD integration</td>
-                <td className="p-3 text-[var(--fg-dim)]">High TVL, user-friendly money market</td>
-                <td className="p-3 text-[var(--fg-dim)]">Object-centric efficiency</td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="mx-auto grid w-full max-w-3xl gap-4 sm:grid-cols-2">
+          {[
+            {
+              label: "Liquidity",
+              rain: "True P2P &mdash; your funds, your counterparty",
+              others: "Pooled. Risk is socialised, rates are averaged.",
+            },
+            {
+              label: "Rates",
+              rain: "Market-discovered on DeepBook orderbook",
+              others: "Algorithmic curves set by the protocol.",
+            },
+            {
+              label: "Custody",
+              rain: "User-owned vaults + Adjudicator pattern",
+              others: "Protocol-controlled pools hold everything.",
+            },
+            {
+              label: "Liquidations",
+              rain: "Fully on-chain via DeepBook &mdash; no keepers",
+              others: "Off-chain bots, auctions, MEV extraction.",
+            },
+            {
+              label: "Off-chain deps",
+              rain: "Zero. No CEX feeds, no relayers",
+              others: "Keepers, centralised oracles, execution infra.",
+            },
+            {
+              label: "Philosophy",
+              rain: "Censorship-resistant, composable, Sui-native",
+              others: "Works, but trust assumptions remain.",
+            },
+          ].map((row) => (
+            <div
+              key={row.label}
+              className="pixel-border bg-[var(--panel)] p-4"
+            >
+              <p className="mb-2 text-[0.65rem] font-medium uppercase tracking-wider text-[var(--fg)] sm:text-xs">
+                {row.label}
+              </p>
+              <p
+                className="mb-1.5 text-[0.6rem] leading-relaxed text-[var(--accent)] sm:text-[0.7rem]"
+                dangerouslySetInnerHTML={{ __html: `Rain: ${row.rain}` }}
+              />
+              <p className="text-[0.55rem] leading-relaxed text-[var(--fg-dim)] sm:text-[0.65rem]">
+                Others: {row.others}
+              </p>
+            </div>
+          ))}
         </div>
+        <p className="mx-auto mt-6 max-w-md text-center text-[0.55rem] text-[var(--fg-dim)] sm:text-[0.65rem]">
+          Suilend, NAVI, Scallop, Bucket &mdash; solid protocols, but all pool-based. Rain complements them with a pure P2P alternative.
+        </p>
       </section>
 
       {/* Go-to-market */}
