@@ -1,21 +1,13 @@
 # Publish Rain package to Sui (testnet or mainnet).
 # Saves package ID and shared object IDs to scripts/config/published.json.
-# Default is testnet (no mainnet funds needed). Testnet uses --skip-dependency-verification so publish succeeds even if Pyth/Wormhole are not deployed on testnet.
+# Testnet: Pyth/DeepBook/token revs match on-chain testnet packages. No bundling.
 # Usage:
 #   .\publish.ps1                    # testnet (default)
-#   .\publish.ps1 -Env mainnet        # mainnet (when you have mainnet funds)
+#   .\publish.ps1 -Env mainnet         # mainnet (when you have mainnet funds)
 #   .\publish.ps1 -GasBudget 1000000000
 #
-# Prerequisites:
-#   - sui CLI installed and configured (sui client active-env, active-address)
-#   - For path deps: deepbook + token at ../../deepbookv3/packages (see Move.toml)
-#   - If Pyth/Wormhole git deps are dirty: use --allow-dirty (script does this)
-#
-# If you see "Failed to fetch package Pyth" (dependency not on target chain), try:
-#   .\publish.ps1 -SkipDependencyVerification
-# or publish to the network where Pyth is deployed (see config/README.md).
-#
-# After publish: set frontend .env with NEXT_PUBLIC_RAIN_PACKAGE_ID=<packageId from published.json>
+# Prerequisites: sui CLI, path deps deepbook + token at ../../deepbookv3/packages.
+# After publish: set frontend .env NEXT_PUBLIC_RAIN_PACKAGE_ID=<packageId from published.json>
 
 param(
     [ValidateSet("testnet", "mainnet")]
@@ -32,20 +24,20 @@ $PublishedPath = Join-Path $ConfigDir "published.json"
 
 Push-Location $PkgDir
 try {
-    # When publishing to testnet, force re-resolution and strip published-at so --with-unpublished-dependencies bundles Pyth/Wormhole.
+    # Testnet: Pyth/Wormhole Move.toml are symlinks on Windows -> parse error. Fix cache dirs and retry.
     if ($Env -eq "testnet") {
-        $lockPath = Join-Path $PkgDir "Move.lock"
-        if (Test-Path $lockPath) {
-            Remove-Item $lockPath -Force
-            Write-Host "Removed Move.lock for testnet (force re-resolution)."
-        }
-        # Resolve deps so cache is populated (may create new cache dirs for Pyth/Wormhole).
-        try { sui move build --allow-dirty --environment testnet 2>&1 | Out-Host } catch { }
-        # Strip published-at in all Pyth/Wormhole cache dirs so CLI treats them as unpublished and bundles them.
         $fixScript = Join-Path $PSScriptRoot "fix_pyth_manifest.ps1"
-        if (Test-Path $fixScript) {
-            & $fixScript -Testnet 2>&1 | Out-Host
+        $maxBuildRetries = 4
+        $buildOk = $false
+        for ($r = 1; $r -le $maxBuildRetries; $r++) {
+            $buildOut = cmd /c "sui move build --allow-dirty --environment testnet 2>&1"
+            Write-Host $buildOut
+            if ($LASTEXITCODE -eq 0) { $buildOk = $true; break }
+            if (-not (Test-Path $fixScript)) { throw "Build failed (exit $LASTEXITCODE)." }
+            Write-Host "Fixing Pyth/Wormhole Move.toml in cache (symlink -> real file), retry $r/$maxBuildRetries..."
+            & $fixScript -Testnet -KeepPublishedAt 2>&1 | Out-Null
         }
+        if (-not $buildOk) { throw "Build failed after $maxBuildRetries retries." }
     }
 
     $args = @(
@@ -60,11 +52,9 @@ try {
         $args += "--dry-run"
         Write-Host "Dry run: sui $($args -join ' ')"
     }
-    # Testnet: bundle and publish Pyth/Wormhole in same tx (fixes PublishUpgradeMissingDependency).
     if ($Env -eq "testnet") {
         $args += "--with-unpublished-dependencies"
-        # Use default gas (800M) so wallets with limited testnet SUI can publish; increase via -GasBudget if you hit out-of-gas.
-        Write-Host "Using --with-unpublished-dependencies (publish Pyth/Wormhole in same tx)."
+        Write-Host "Using --with-unpublished-dependencies (bundle Pyth/Wormhole if not on-chain)."
     }
     if ($SkipDependencyVerification -or $Env -eq "testnet") {
         $args += "--skip-dependency-verification"
@@ -95,7 +85,9 @@ try {
             $hint = "Pyth package not on this network. Try: .\publish.ps1 -SkipDependencyVerification"
         }
         if ($stdout -match "PublishUpgradeMissingDependency") {
-            $hint = "A dependency (Pyth/Wormhole) is not on-chain on $Env. Try: (1) install latest Sui CLI from https://github.com/MystenLabs/sui/releases to match server (Windows has no sui upgrade), (2) run .\publish.ps1 again, (3) use mainnet when you have funds: .\publish.ps1 -Env mainnet"
+            $hint = "A dependency (Pyth/Wormhole) is not on-chain on $Env. Script bundles them with --with-unpublished-dependencies. If it still fails, try: (1) install latest Sui CLI from https://github.com/MystenLabs/sui/releases, (2) run .\publish.ps1 again, (3) get more testnet SUI from faucet if out of gas, (4) mainnet: .\publish.ps1 -Env mainnet"
+        } elseif ($stdout -match "insufficient gas|out of gas|InsufficientFunds") {
+            $hint = "Not enough SUI for gas. Get more testnet SUI from faucet, or try: .\publish.ps1 -GasBudget 400000000"
         }
         throw $hint
     }
@@ -104,37 +96,52 @@ try {
 
     # Extract package ID and created objects (structure varies by Sui CLI version)
     $packageId = $null
-    if ($json.packageId) { $packageId = $json.packageId }
-    elseif ($json.PackageID) { $packageId = $json.PackageID }
-    elseif ($json.effects -and $json.effects.packageId) { $packageId = $json.effects.packageId }
-    elseif ($json.result -and $json.result.packageId) { $packageId = $json.result.packageId }
-
     $txDigest = $null
-    if ($json.digest) { $txDigest = $json.digest }
-    elseif ($json.txDigest) { $txDigest = $json.txDigest }
-    elseif ($json.effects -and $json.effects.transactionDigest) { $txDigest = $json.effects.transactionDigest }
-
-    $created = @()
-    if ($json.created) { $created = @($json.created) }
-    elseif ($json.objectChanges) {
-        $created = @($json.objectChanges | Where-Object { $_.type -eq "created" -or $_.objectType })
-    }
-    elseif ($json.effects -and $json.effects.created) { $created = @($json.effects.created) }
-    elseif ($json.effects -and $json.effects.objectChanges) {
-        $created = @($json.effects.objectChanges | Where-Object { $_.type -eq "created" })
-    }
-
     $lendingMarketplaceId = $null
-    foreach ($c in $created) {
-        $objId = $c.objectId
-        if (-not $objId -and $c.reference) { $objId = $c.reference.objectId }
-        if (-not $objId -and $c.objectRef) { $objId = $c.objectRef.objectId }
-        $objType = $c.objectType
-        if (-not $objType) { $objType = $c.type }
-        if (-not $objType) { $objType = "" }
-        if ($objType -match "LendingMarketplace" -or $objType -match "marketplace::LendingMarketplace") {
-            $lendingMarketplaceId = $objId
-            break
+
+    # V2 effects format (Sui CLI >= 1.65)
+    if ($json.effects -and $json.effects.V2) {
+        $v2 = $json.effects.V2
+        $txDigest = $v2.transaction_digest
+        # Find package and marketplace from changed_objects
+        foreach ($c in $json.changed_objects) {
+            if ($c.objectType -eq "package") {
+                $packageId = $c.objectId
+            }
+            if ($c.objectType -match "LendingMarketplace") {
+                $lendingMarketplaceId = $c.objectId
+            }
+        }
+    }
+    # Legacy formats
+    else {
+        if ($json.packageId) { $packageId = $json.packageId }
+        elseif ($json.PackageID) { $packageId = $json.PackageID }
+        elseif ($json.effects -and $json.effects.packageId) { $packageId = $json.effects.packageId }
+        elseif ($json.result -and $json.result.packageId) { $packageId = $json.result.packageId }
+
+        if ($json.digest) { $txDigest = $json.digest }
+        elseif ($json.txDigest) { $txDigest = $json.txDigest }
+        elseif ($json.effects -and $json.effects.transactionDigest) { $txDigest = $json.effects.transactionDigest }
+
+        $created = @()
+        if ($json.created) { $created = @($json.created) }
+        elseif ($json.objectChanges) {
+            $created = @($json.objectChanges | Where-Object { $_.type -eq "created" -or $_.objectType })
+        }
+        elseif ($json.effects -and $json.effects.created) { $created = @($json.effects.created) }
+
+        foreach ($c in $created) {
+            $objId = $c.objectId
+            if (-not $objId -and $c.reference) { $objId = $c.reference.objectId }
+            if (-not $objId -and $c.objectRef) { $objId = $c.objectRef.objectId }
+            $objType = $c.objectType
+            if (-not $objType) { $objType = $c.type }
+            if (-not $objType) { $objType = "" }
+            if ($objType -match "LendingMarketplace" -or $objType -match "marketplace::LendingMarketplace") {
+                $lendingMarketplaceId = $objId
+                break
+            }
         }
     }
 

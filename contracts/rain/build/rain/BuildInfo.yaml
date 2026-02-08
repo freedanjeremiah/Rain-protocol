@@ -28,4 +28,4 @@ dependencies:
   - Sui
   - Wormhole
   - deepbook
-  - token_1
+  - token

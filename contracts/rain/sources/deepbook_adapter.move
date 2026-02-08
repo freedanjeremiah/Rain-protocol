@@ -45,7 +45,7 @@ public fun swap_exact_base_for_quote<BaseAsset, QuoteAsset>(
         pool::swap_exact_base_for_quote(pool, base_in, deep_in, min_quote_out, clock, ctx);
     let quote_out_amount = value(&quote_out_coin);
     event::emit(SwapExecuted {
-        pool_id: pool::id(pool),
+        pool_id: sui::object::id(pool),
         base_in: base_in_amount,
         quote_out: quote_out_amount,
     });

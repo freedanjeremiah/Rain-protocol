@@ -1,28 +1,21 @@
 [package]
 name = "rain"
-edition = "2024.beta"
+edition = "2024"
 version = "0.1.0"
 
 [dependencies]
-# Path deps to local DeepBook and token (spec Step 0.2). Sui CLI uses "local" key for workspace deps.
-deepbook = { local = "../../deepbookv3/packages/deepbook" }
-token    = { local = "../../deepbookv3/packages/token", override = true }
+deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "deepbook3.1" }
 
-[dependencies.Pyth]
+[dependencies.pyth]
 git = "https://github.com/pyth-network/pyth-crosschain.git"
 subdir = "target_chains/sui/contracts"
-rev = "sui-contract-mainnet"
+rev = "sui-contract-testnet"
 
-[dependencies.Wormhole]
+# Wormhole pinned to the same rev Pyth resolves to, avoiding override and version conflicts.
+[dependencies.wormhole]
 git = "https://github.com/wormhole-foundation/wormhole.git"
 subdir = "sui/wormhole"
-rev = "sui/mainnet"
-
-# Use Pyth testnet contract when publishing to testnet (no mainnet funds needed).
-[dep-replacements.testnet]
-Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/sui/contracts", rev = "sui-contract-testnet" }
-
-# Do not add explicit Sui dep; use toolchain default to avoid MoveStdlib version conflict with deepbook.
+rev = "1b1cb69e809e0e7081cf1bf9b2779c41c14fc7f0"
 
 [addresses]
 rain = "0x0"

@@ -1,9 +1,11 @@
 # Fix Move.toml in git deps: Pyth and Wormhole use Move.mainnet.toml or Move.testnet.toml; Sui Move expects Move.toml.
 # Run this if "sui move build" fails with: Error parsing "...Move.toml": expected `.`, `=`
-# Use -Testnet when publishing to testnet. Also strips published-at so --with-unpublished-dependencies bundles Pyth/Wormhole in the same tx (fixes PublishUpgradeMissingDependency).
+# Use -Testnet when publishing to testnet.
+# Use -KeepPublishedAt when Pyth/Wormhole are already on-chain (e.g. testnet); then do NOT strip published-at so publish uses existing packages.
+# Omit -KeepPublishedAt to strip published-at and bundle with --with-unpublished-dependencies (only if chain does not have Pyth/Wormhole).
 # Then run "sui move build --allow-dirty" from contracts/rain.
 
-param([switch] $Testnet)
+param([switch] $Testnet, [switch] $KeepPublishedAt)
 
 $moveDir = Join-Path (Join-Path $env:USERPROFILE ".move") "git"
 if (-not (Test-Path $moveDir)) {
@@ -26,10 +28,13 @@ Get-ChildItem -Path $moveDir -Directory -ErrorAction SilentlyContinue | Where-Ob
             $content = Get-Content $toml -Raw
             # Patch Wormhole rev so resolver can find it (sui-upgrade-testnet often missing).
             $content = $content -replace 'rev\s*=\s*"sui-upgrade-testnet"', "rev = `"$wormholeTestnetRev`""
-            # Remove published-at so CLI treats Pyth as unpublished and bundles it with --with-unpublished-dependencies.
-            $content = $content -replace '(?m)^published-at\s*=\s*"[^"]+"\s*\r?\n', ''
+            # Remove published-at only when bundling; when KeepPublishedAt, use already on-chain packages.
+            if (-not $KeepPublishedAt) {
+                $content = $content -replace '(?m)^published-at\s*=\s*"[^"]+"\s*\r?\n', ''
+            }
             Set-Content $toml $content -NoNewline
-            Write-Host "Copied Move.testnet.toml -> Move.toml in $contracts (testnet, published-at removed for bundle)"
+            $msg = if ($KeepPublishedAt) { "testnet, published-at kept for on-chain deps" } else { "testnet, published-at removed for bundle" }
+            Write-Host "Copied Move.testnet.toml -> Move.toml in $contracts ($msg)"
             $fixed++
         }
     } else {
@@ -50,9 +55,11 @@ Get-ChildItem -Path $moveDir -Directory -ErrorAction SilentlyContinue | Where-Ob
         $src = Join-Path $wormhole "Move.testnet.toml"
         if (Test-Path $src) {
             Copy-Item -Path $src -Destination $toml -Force
-            # Remove published-at so CLI bundles Wormhole with --with-unpublished-dependencies.
-            (Get-Content $toml -Raw) -replace '(?m)^published-at\s*=\s*"[^"]+"\s*\r?\n', '' | Set-Content $toml -NoNewline
-            Write-Host "Copied Move.testnet.toml -> Move.toml in $wormhole (testnet, published-at removed for bundle)"
+            if (-not $KeepPublishedAt) {
+                (Get-Content $toml -Raw) -replace '(?m)^published-at\s*=\s*"[^"]+"\s*\r?\n', '' | Set-Content $toml -NoNewline
+            }
+            $msg = if ($KeepPublishedAt) { "testnet, published-at kept for on-chain deps" } else { "testnet, published-at removed for bundle" }
+            Write-Host "Copied Move.testnet.toml -> Move.toml in $wormhole ($msg)"
             $fixed++
         }
     } else {

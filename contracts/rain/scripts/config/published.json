@@ -1,8 +1,8 @@
 {
   "network": "testnet",
-  "packageId": "0x0",
-  "lendingMarketplaceId": null,
-  "txDigest": null,
-  "publishedAt": null,
+  "packageId": "0x46866743cab6b7174895be4848c598db76101dddef61962223971b853a3f0701",
+  "lendingMarketplaceId": "0x0dfb245d338b3568c00e45e313d412685b5159251d5ed1dea6ca708c8f93fc28",
+  "txDigest": "CWVf1A2g8oanxHtgawwuBiKExhzpdRbFM93T2LdvvNJ5",
+  "publishedAt": "2026-02-08",
   "_comment": "Run scripts/publish.ps1 (testnet) or publish.ts to populate; set frontend NEXT_PUBLIC_RAIN_PACKAGE_ID from packageId"
 }
