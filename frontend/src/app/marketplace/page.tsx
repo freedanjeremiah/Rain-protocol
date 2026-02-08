@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import Layout from "@/components/common/Layout";
 import { WalletGate } from "@/components/shared/WalletGate";
 import {
@@ -9,12 +10,31 @@ import {
   MarketLendOrder,
 } from "@/hooks/useMarketplaceOrders";
 import { useFillOrder } from "@/hooks/useRainTransactions";
+import { RAIN } from "@/lib/rain";
 import { toast } from "sonner";
 
-const DEFAULT_PRICE_FEED =
-  "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266";
+/** Parse Sui transaction errors into user-friendly messages */
+function formatFillError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/not signed by the correct sender|owned by account.*but given owner\/signer/i.test(msg))
+    return "Only the borrower can sign this fill. Connect the borrower's wallet and ensure they have the loan amount in their wallet, then try again.";
+  const objIdMatch =
+    msg.match(/"object_id"\s*:\s*"(0x[a-fA-F0-9]+)"/) ??
+    msg.match(/notExists[^\w]*["']?(0x[a-fA-F0-9]+)["']?/);
+  const objId = objIdMatch?.[1]?.toLowerCase();
+  if (objId) {
+    if (objId === RAIN.pyth.suiUsdPriceObjectId?.toLowerCase())
+      return "Pyth price feed object not found. The ID in your env is for a different network (testnet vs mainnet). Update NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID for the network your wallet is connected to.";
+    if (objId === RAIN.marketplaceId?.toLowerCase())
+      return "Marketplace object not found. Ensure NEXT_PUBLIC_LENDING_MARKETPLACE_ID matches the network your wallet is connected to.";
+    return `An object used by this transaction does not exist on this network (${objId}). It may have been deleted or the ID may be for a different network.`;
+  }
+  return msg;
+}
 
 export default function MarketplacePage() {
+  const client = useSuiClient();
+  const currentAccount = useCurrentAccount();
   const { borrowOrders, lendOrders, isPending, error, refetch } =
     useMarketplaceOrders();
   const { fillOrder, isPending: filling } = useFillOrder();
@@ -25,8 +45,41 @@ export default function MarketplacePage() {
     lendOrder?: MarketLendOrder;
   } | null>(null);
   const [fillAmount, setFillAmount] = useState("");
-  const [matchOrderId, setMatchOrderId] = useState("");
-  const [priceInfoObjectId, setPriceInfoObjectId] = useState("");
+  const [selectedLendOrderId, setSelectedLendOrderId] = useState("");
+  const [selectedBorrowOrderId, setSelectedBorrowOrderId] = useState("");
+
+  // When filling a borrow order, filter lend orders to compatible ones:
+  // same durationSecs AND minInterestBps <= borrowOrder.maxInterestBps
+  const compatibleLendOrders = useMemo(() => {
+    if (!fillModal?.borrowOrder) return [];
+    const bo = fillModal.borrowOrder;
+    return lendOrders.filter(
+      (lo) =>
+        lo.durationSecs === bo.durationSecs &&
+        Number(lo.minInterestBps) <= Number(bo.maxInterestBps) &&
+        Number(lo.remaining) > 0,
+    );
+  }, [fillModal, lendOrders]);
+
+  // When filling a lend order, filter borrow orders to compatible ones
+  const compatibleBorrowOrders = useMemo(() => {
+    if (!fillModal?.lendOrder) return [];
+    const lo = fillModal.lendOrder;
+    return borrowOrders.filter(
+      (bo) =>
+        bo.durationSecs === lo.durationSecs &&
+        Number(bo.maxInterestBps) >= Number(lo.minInterestBps) &&
+        Number(bo.remaining) > 0,
+    );
+  }, [fillModal, borrowOrders]);
+
+  // Clamp fill amount to min(borrowRemaining, lendRemaining)
+  const selectedLendOrder = lendOrders.find(
+    (o) => o.objectId === selectedLendOrderId,
+  );
+  const selectedBorrowOrder = borrowOrders.find(
+    (o) => o.objectId === selectedBorrowOrderId,
+  );
 
   const handleFill = async () => {
     if (!fillModal) return;
@@ -34,35 +87,57 @@ export default function MarketplacePage() {
       toast.error("Enter a fill amount.");
       return;
     }
-    if (!matchOrderId) {
-      toast.error("Enter the matching order ID.");
-      return;
-    }
-    if (!priceInfoObjectId) {
-      toast.error("Enter PriceInfoObject ID for the oracle.");
-      return;
-    }
 
     try {
       let borrowOrderId: string;
       let lendOrderId: string;
       let borrowerVaultId: string;
+      let borrowerAddress: string;
 
       if (fillModal.borrowOrder) {
-        // Filling a borrow order: caller is lender, needs a matching lend order
+        if (!selectedLendOrderId) {
+          toast.error("Select a lend order to match.");
+          return;
+        }
         borrowOrderId = fillModal.borrowOrder.objectId;
-        lendOrderId = matchOrderId;
+        lendOrderId = selectedLendOrderId;
         borrowerVaultId = fillModal.borrowOrder.vaultId;
+        borrowerAddress = fillModal.borrowOrder.borrower;
       } else if (fillModal.lendOrder) {
-        // Filling a lend order: caller is borrower, needs a matching borrow order
-        borrowOrderId = matchOrderId;
+        if (!selectedBorrowOrderId) {
+          toast.error("Select a borrow order to match.");
+          return;
+        }
+        const matchedBorrow = borrowOrders.find(
+          (o) => o.objectId === selectedBorrowOrderId,
+        );
+        if (!matchedBorrow) {
+          toast.error("Selected borrow order not found.");
+          return;
+        }
+        borrowOrderId = selectedBorrowOrderId;
         lendOrderId = fillModal.lendOrder.objectId;
-        borrowerVaultId = ""; // will be provided via matchOrderId's vault
+        borrowerVaultId = matchedBorrow.vaultId;
+        borrowerAddress = matchedBorrow.borrower;
+      } else {
+        return;
+      }
+
+      // fill_order requires the borrower's vault; only the vault owner can pass it, so only the borrower can sign
+      const signer = currentAccount?.address?.toLowerCase();
+      const borrower = borrowerAddress?.toLowerCase();
+      if (!signer || signer !== borrower) {
         toast.error(
-          "To fill a lend order, select a borrow order to match against.",
+          "Only the borrower can sign this fill. Connect the borrower's wallet (they must have the loan amount—e.g. sent by the lender—then click Fill order).",
         );
         return;
-      } else {
+      }
+
+      const vaultObj = await client.getObject({ id: borrowerVaultId });
+      if (!vaultObj.data || vaultObj.error) {
+        toast.error(
+          "Borrower vault no longer exists. This order may be stale—try refreshing the order book.",
+        );
         return;
       }
 
@@ -71,19 +146,20 @@ export default function MarketplacePage() {
         lendOrderId,
         borrowerVaultId,
         fillAmount,
-        DEFAULT_PRICE_FEED,
-        priceInfoObjectId,
       );
       toast.success("Order filled successfully!");
-      setFillModal(null);
-      setFillAmount("");
-      setMatchOrderId("");
+      closeModal();
       refetch();
     } catch (e: unknown) {
-      toast.error(
-        `Fill failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Fill failed: ${formatFillError(e)}`);
     }
+  };
+
+  const closeModal = () => {
+    setFillModal(null);
+    setFillAmount("");
+    setSelectedLendOrderId("");
+    setSelectedBorrowOrderId("");
   };
 
   return (
@@ -174,6 +250,7 @@ export default function MarketplacePage() {
                       onClick={() => {
                         setFillModal({ borrowOrder: o });
                         setFillAmount(o.remaining);
+                        setSelectedLendOrderId("");
                       }}
                     >
                       Fill
@@ -230,6 +307,7 @@ export default function MarketplacePage() {
                       onClick={() => {
                         setFillModal({ lendOrder: o });
                         setFillAmount(o.remaining);
+                        setSelectedBorrowOrderId("");
                       }}
                     >
                       Fill
@@ -247,37 +325,145 @@ export default function MarketplacePage() {
                 <h2 className="mb-4 text-lg uppercase tracking-wider">
                   Fill Order
                 </h2>
+                <p className="mb-2 text-xs text-[var(--fg-dim)]">
+                  The borrower must sign this transaction (they need the loan amount in their wallet; the lender can send it first).
+                </p>
                 <div className="mb-4 text-xs text-[var(--fg-dim)]">
                   {fillModal.borrowOrder && (
                     <p>
                       Filling borrow order{" "}
                       {fillModal.borrowOrder.objectId.slice(0, 12)}... (max
-                      remaining: {fillModal.borrowOrder.remaining})
+                      remaining: {fillModal.borrowOrder.remaining}, max rate:{" "}
+                      {fillModal.borrowOrder.maxInterestBps} bps,{" "}
+                      {Math.floor(
+                        Number(fillModal.borrowOrder.durationSecs) / 86400,
+                      )}
+                      d)
                     </p>
                   )}
                   {fillModal.lendOrder && (
                     <p>
                       Filling lend order{" "}
                       {fillModal.lendOrder.objectId.slice(0, 12)}... (max
-                      remaining: {fillModal.lendOrder.remaining})
+                      remaining: {fillModal.lendOrder.remaining}, min rate:{" "}
+                      {fillModal.lendOrder.minInterestBps} bps,{" "}
+                      {Math.floor(
+                        Number(fillModal.lendOrder.durationSecs) / 86400,
+                      )}
+                      d)
                     </p>
                   )}
                 </div>
                 <div className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
-                      {fillModal.borrowOrder
-                        ? "Your Lend Order ID (to match)"
-                        : "Borrow Order ID (to match)"}
-                    </label>
-                    <input
-                      type="text"
-                      value={matchOrderId}
-                      onChange={(e) => setMatchOrderId(e.target.value)}
-                      placeholder="0x..."
-                      className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] placeholder:text-[var(--fg-dim)]"
-                    />
-                  </div>
+                  {/* Matching order selector */}
+                  {fillModal.borrowOrder && (
+                    <div>
+                      <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
+                        Select Lend Order to match
+                      </label>
+                      {compatibleLendOrders.length === 0 ? (
+                        <p className="text-xs text-yellow-400">
+                          No compatible lend orders (same duration, rate
+                          &le; max).
+                        </p>
+                      ) : (
+                        <select
+                          value={selectedLendOrderId}
+                          onChange={(e) => {
+                            setSelectedLendOrderId(e.target.value);
+                            // Clamp fill amount to min of both remaining
+                            const lo = lendOrders.find(
+                              (o) => o.objectId === e.target.value,
+                            );
+                            if (lo && fillModal.borrowOrder) {
+                              const clamped = Math.min(
+                                Number(fillModal.borrowOrder.remaining),
+                                Number(lo.remaining),
+                              );
+                              setFillAmount(String(clamped));
+                            }
+                          }}
+                          className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
+                        >
+                          <option value="">Choose a lend order</option>
+                          {compatibleLendOrders.map((lo) => (
+                            <option key={lo.objectId} value={lo.objectId}>
+                              {lo.objectId.slice(0, 8)}... | remaining:{" "}
+                              {lo.remaining} | rate: {lo.minInterestBps}bps |{" "}
+                              {Math.floor(Number(lo.durationSecs) / 86400)}d
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {fillModal.lendOrder && (
+                    <div>
+                      <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
+                        Select Borrow Order to match
+                      </label>
+                      {compatibleBorrowOrders.length === 0 ? (
+                        <p className="text-xs text-yellow-400">
+                          No compatible borrow orders (same duration, rate
+                          &ge; min).
+                        </p>
+                      ) : (
+                        <select
+                          value={selectedBorrowOrderId}
+                          onChange={(e) => {
+                            setSelectedBorrowOrderId(e.target.value);
+                            const bo = borrowOrders.find(
+                              (o) => o.objectId === e.target.value,
+                            );
+                            if (bo && fillModal.lendOrder) {
+                              const clamped = Math.min(
+                                Number(fillModal.lendOrder.remaining),
+                                Number(bo.remaining),
+                              );
+                              setFillAmount(String(clamped));
+                            }
+                          }}
+                          className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
+                        >
+                          <option value="">Choose a borrow order</option>
+                          {compatibleBorrowOrders.map((bo) => (
+                            <option key={bo.objectId} value={bo.objectId}>
+                              {bo.objectId.slice(0, 8)}... | remaining:{" "}
+                              {bo.remaining} | max rate:{" "}
+                              {bo.maxInterestBps}bps |{" "}
+                              {Math.floor(Number(bo.durationSecs) / 86400)}d
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Selected match details */}
+                  {fillModal.borrowOrder && selectedLendOrder && (
+                    <div className="pixel-border bg-[var(--panel)] p-3 text-xs space-y-0.5">
+                      <p className="text-[var(--fg-dim)]">Matched lend order:</p>
+                      <p>Remaining: {selectedLendOrder.remaining}</p>
+                      <p>
+                        Rate: {selectedLendOrder.minInterestBps} bps (
+                        {(Number(selectedLendOrder.minInterestBps) / 100).toFixed(1)}
+                        %)
+                      </p>
+                    </div>
+                  )}
+                  {fillModal.lendOrder && selectedBorrowOrder && (
+                    <div className="pixel-border bg-[var(--panel)] p-3 text-xs space-y-0.5">
+                      <p className="text-[var(--fg-dim)]">Matched borrow order:</p>
+                      <p>Remaining: {selectedBorrowOrder.remaining}</p>
+                      <p>
+                        Max rate: {selectedBorrowOrder.maxInterestBps} bps (
+                        {(Number(selectedBorrowOrder.maxInterestBps) / 100).toFixed(1)}
+                        %)
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
                       Fill Amount
@@ -289,35 +475,27 @@ export default function MarketplacePage() {
                       className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)]"
                     />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
-                      PriceInfoObject ID (Pyth oracle)
-                    </label>
-                    <input
-                      type="text"
-                      value={priceInfoObjectId}
-                      onChange={(e) => setPriceInfoObjectId(e.target.value)}
-                      placeholder="0x..."
-                      className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] placeholder:text-[var(--fg-dim)]"
-                    />
-                  </div>
+
+                  {!RAIN.pyth.suiUsdPriceObjectId && (
+                    <p className="text-xs text-red-400">
+                      Set NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID in .env to
+                      enable Fill.
+                    </p>
+                  )}
+
                   <div className="flex gap-3">
                     <button
                       type="button"
                       className="pixel-btn pixel-btn-accent"
                       onClick={handleFill}
-                      disabled={filling}
+                      disabled={filling || !RAIN.pyth.suiUsdPriceObjectId}
                     >
                       {filling ? "Filling..." : "Confirm Fill"}
                     </button>
                     <button
                       type="button"
                       className="pixel-btn"
-                      onClick={() => {
-                        setFillModal(null);
-                        setFillAmount("");
-                        setMatchOrderId("");
-                      }}
+                      onClick={closeModal}
                     >
                       Cancel
                     </button>

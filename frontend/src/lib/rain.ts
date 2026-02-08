@@ -5,6 +5,8 @@
 const PACKAGE_ID = process.env.NEXT_PUBLIC_RAIN_PACKAGE_ID ?? "0x0";
 const MARKETPLACE_ID =
   process.env.NEXT_PUBLIC_LENDING_MARKETPLACE_ID ?? "0x0";
+const PYTH_SUI_USD_PRICE_OBJECT =
+  process.env.NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID ?? "";
 const DEEPBOOK_SUI_USDC_POOL =
   process.env.NEXT_PUBLIC_DEEPBOOK_SUI_USDC_POOL_ID ?? "";
 const DEEP_COIN_TYPE =
@@ -52,6 +54,21 @@ export const RAIN = {
   liquidation: {
     liquidate: `${PACKAGE_ID}::liquidation::liquidate`,
     sellCollateralAndSettle: `${PACKAGE_ID}::liquidation::sell_collateral_and_settle`,
+  },
+
+  pyth: {
+    suiUsdPriceObjectId: PYTH_SUI_USD_PRICE_OBJECT,
+    /** SUI/USD feed ID (hex, with 0x for SDK) */
+    suiUsdFeedId:
+      "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266",
+    /** Testnet only: Pyth pull oracle – update price in same tx as fill (no env object ID needed) */
+    testnet: {
+      hermesUrl: "https://hermes-beta.pyth.network",
+      pythStateId:
+        "0x243759059f4c3111179da5878c12f68d612c21a8d54d85edc86164bb18be1c7c",
+      wormholeStateId:
+        "0x31358d198147da50db32eda2562951d53973a0c0ad5ed738e9b17d88b213d790",
+    },
   },
 
   deepbook: {

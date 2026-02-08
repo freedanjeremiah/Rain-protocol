@@ -11,8 +11,7 @@ import { useSuiClient } from "@mysten/dapp-kit";
 import { RAIN } from "@/lib/rain";
 import { toast } from "sonner";
 
-const DEFAULT_PRICE_FEED =
-  "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266";
+const envPriceInfoObjectId = RAIN.pyth.suiUsdPriceObjectId;
 
 interface DiscoveredVault {
   objectId: string;
@@ -39,8 +38,8 @@ export default function LiquidatePage() {
   // Step 1: Liquidate fields
   const [userVaultId, setUserVaultId] = useState("");
   const [custodyVaultId, setCustodyVaultId] = useState("");
-  const [priceFeedId, setPriceFeedId] = useState(DEFAULT_PRICE_FEED);
-  const [priceInfoObjectId, setPriceInfoObjectId] = useState("");
+  const [priceFeedId, setPriceFeedId] = useState<string>(RAIN.pyth.suiUsdFeedId);
+  const [priceInfoObjectId, setPriceInfoObjectId] = useState<string>(envPriceInfoObjectId);
   const [maxAgeSecs, setMaxAgeSecs] = useState("60");
 
   // Step 2: Sell & Settle fields
@@ -314,13 +313,36 @@ export default function LiquidatePage() {
                 <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">
                   PriceInfoObject ID (Sui object)
                 </label>
-                <input
-                  type="text"
-                  value={priceInfoObjectId}
-                  onChange={(e) => setPriceInfoObjectId(e.target.value)}
-                  placeholder="0x..."
-                  className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] placeholder:text-[var(--fg-dim)]"
-                />
+                {envPriceInfoObjectId ? (
+                  <div className="space-y-1">
+                    <p className="pixel-border bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] break-all">
+                      {priceInfoObjectId}
+                    </p>
+                    <details className="text-xs text-[var(--fg-dim)]">
+                      <summary className="cursor-pointer">Override</summary>
+                      <input
+                        type="text"
+                        value={priceInfoObjectId}
+                        onChange={(e) => setPriceInfoObjectId(e.target.value)}
+                        placeholder="0x..."
+                        className="pixel-border mt-1 w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] placeholder:text-[var(--fg-dim)]"
+                      />
+                    </details>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={priceInfoObjectId}
+                      onChange={(e) => setPriceInfoObjectId(e.target.value)}
+                      placeholder="0x..."
+                      className="pixel-border w-full bg-[var(--panel)] px-3 py-2 text-xs text-[var(--fg)] placeholder:text-[var(--fg-dim)]"
+                    />
+                    <p className="mt-1 text-xs text-yellow-400">
+                      Set NEXT_PUBLIC_PYTH_SUI_USD_PRICE_OBJECT_ID in .env to auto-fill.
+                    </p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs uppercase text-[var(--fg-dim)]">

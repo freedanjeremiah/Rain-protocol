@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
+import { Buffer } from "buffer";
 import { Transaction } from "@mysten/sui/transactions";
-import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
+import {
+  SuiPythClient,
+  SuiPriceServiceConnection,
+} from "@pythnetwork/pyth-sui-js";
 import { RAIN, SUI_CLOCK } from "@/lib/rain";
 
 const DEFAULT_LIQUIDATION_THRESHOLD_BPS = 8000; // 80%
@@ -207,37 +212,61 @@ export function useRepayPosition() {
 /*  Marketplace: fill order (match borrow + lend)                     */
 /* ------------------------------------------------------------------ */
 
+/** SUI/USD feed ID with 0x for Pyth SDK */
+const SUI_USD_FEED_ID_HEX = `0x${RAIN.pyth.suiUsdFeedId}`;
+
+/**
+ * Fills a borrow order with a lend order using Pyth pull oracle: updates the
+ * SUI/USD price in the same transaction, then calls fill_order. No env
+ * price object ID needed (testnet).
+ */
 export function useFillOrder() {
+  const client = useSuiClient();
   const { mutateAsync: signAndExecute, isPending } =
     useSignAndExecuteTransaction();
 
-  /**
-   * Fills a borrow order with a lend order. The caller (lender) provides
-   * the coin to fund the loan.
-   *
-   *   - borrowOrderId: the BorrowOrder ID in the marketplace
-   *   - lendOrderId: the LendOrder ID in the marketplace
-   *   - borrowerVaultId: the borrower's UserVault object
-   *   - fillAmount: amount to fill (in base units)
-   *   - priceFeedId: Pyth price feed hex string (no 0x prefix)
-   *   - priceInfoObjectId: the Sui object for the Pyth price
-   *   - maxAgeSecs: max oracle staleness
-   */
   const fillOrder = useCallback(
     async (
       borrowOrderId: string,
       lendOrderId: string,
       borrowerVaultId: string,
       fillAmount: string,
-      priceFeedId: string,
-      priceInfoObjectId: string,
       maxAgeSecs: number = 60,
     ) => {
       const tx = new Transaction();
+      const { testnet } = RAIN.pyth as {
+        hermesUrl: string;
+        pythStateId: string;
+        wormholeStateId: string;
+      };
 
-      const coin = tx.splitCoins(tx.gas, [tx.pure.u64(fillAmount)]);
+      const connection = new SuiPriceServiceConnection(testnet.hermesUrl);
+      const priceIds = [SUI_USD_FEED_ID_HEX];
+      const rawUpdates = await connection.getPriceFeedsUpdateData(priceIds);
+      // SDK expects Node Buffer (readUint8/readUint16BE); Hermes may return Uint8Array in browser
+      const updates = rawUpdates.map((u) => Buffer.from(u));
+      const pythClient = new SuiPythClient(
+        client,
+        testnet.pythStateId,
+        testnet.wormholeStateId,
+      );
+      const priceInfoObjectIds = await pythClient.updatePriceFeeds(
+        tx,
+        updates,
+        priceIds,
+      );
+      const priceInfoObjectId = priceInfoObjectIds[0];
+      if (!priceInfoObjectId) {
+        throw new Error("Pyth did not return a price object for SUI/USD");
+      }
+
+      // Split into two coins so both results are used (avoids UnusedValueWithoutDrop: result_idx 5)
+      const [coinForFill, coinRest] = tx.splitCoins(tx.gas, [
+        tx.pure.u64(fillAmount),
+        tx.pure.u64(1),
+      ]);
       const feedBytes = Array.from(
-        Buffer.from(priceFeedId.replace(/^0x/, ""), "hex"),
+        Buffer.from(RAIN.pyth.suiUsdFeedId, "hex"),
       );
 
       tx.moveCall({
@@ -248,7 +277,7 @@ export function useFillOrder() {
           tx.pure.id(borrowOrderId),
           tx.pure.id(lendOrderId),
           tx.pure.u64(fillAmount),
-          coin,
+          coinForFill,
           tx.object(borrowerVaultId),
           tx.pure.vector("u8", feedBytes),
           tx.object(priceInfoObjectId),
@@ -256,10 +285,11 @@ export function useFillOrder() {
           tx.pure.u64(maxAgeSecs),
         ],
       });
+      tx.mergeCoins(tx.gas, [coinRest]);
 
       return signAndExecute({ transaction: tx });
     },
-    [signAndExecute],
+    [client, signAndExecute],
   );
 
   return { fillOrder, isPending };
